@@ -1,5 +1,4 @@
 # Vexor Logs default Vector configuration.
-# Reads /etc/vexor/logs.env for VEXOR_LOGS_URL and host metadata.
 data_dir = "/var/lib/vector"
 
 [sources.host_files]
@@ -17,9 +16,20 @@ type = "remap"
 inputs = ["host_files", "journald"]
 source = '''
 .host = get_env_var("HOSTNAME") ?? "unknown"
-.service = .SYSTEMD_UNIT ?? string!(.file) ?? "unknown"
-# VictoriaLogs treats _msg as the primary message field; map Loki body.
-._msg = del(.message) ?? .MESSAGE ?? ""
+if exists(.SYSTEMD_UNIT) {
+  .service = .SYSTEMD_UNIT
+} else if exists(.file) {
+  .service = .file
+} else {
+  .service = "unknown"
+}
+if exists(.message) {
+  ._msg = del(.message)
+} else if exists(.MESSAGE) {
+  ._msg = .MESSAGE
+} else {
+  ._msg = ""
+}
 '''
 
 [sinks.victorialogs]
