@@ -1,0 +1,22 @@
+[Unit]
+Description=Vexor / VictoriaLogs daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vexor
+Group=vexor
+ExecStart=/usr/bin/victoria-logs \
+    -storageDataPath=/var/lib/vexor/victorialogs \
+    -retentionPeriod=30d \
+    -httpListenAddr=127.0.0.1:9428 \
+    -loggerOutput=stdout
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=1048576
+ProtectSystem=full
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

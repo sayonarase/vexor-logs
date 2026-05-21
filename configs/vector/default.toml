@@ -1,0 +1,28 @@
+# Vexor Logs default Vector configuration.
+# Reads /etc/vexor/logs.env for VEXOR_LOGS_URL and host metadata.
+data_dir = "/var/lib/vector"
+
+[sources.host_files]
+type   = "file"
+include = ["/var/log/messages", "/var/log/secure", "/var/log/audit/audit.log"]
+ignore_older_secs = 86400
+read_from = "end"
+
+[sources.journald]
+type = "journald"
+
+[transforms.tag]
+type   = "remap"
+inputs = ["host_files", "journald"]
+source = '''
+.host = get_env_var!("HOSTNAME") ?? "unknown"
+.service = .SYSTEMD_UNIT ?? .file ?? "unknown"
+'''
+
+[sinks.victorialogs]
+type     = "loki"
+inputs   = ["tag"]
+endpoint = "${VEXOR_LOGS_URL:-http://127.0.0.1:9428}"
+encoding.codec = "json"
+labels   = { host = "{{ host }}", service = "{{ service }}" }
+out_of_order_action = "accept"

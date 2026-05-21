@@ -1,0 +1,13 @@
+# Vexor Logs default configuration for VictoriaLogs.
+# These flags are also rendered into the systemd unit; this file documents
+# the intended defaults and may be consumed by future config-driven launchers.
+storage:
+  path: /var/lib/vexor/victorialogs
+retention:
+  period: 30d              # keep 30 days of logs by default
+http:
+  listen: 127.0.0.1:9428   # accessed via the vexor-api proxy
+  max_concurrent_requests: 16
+ingest:
+  loki_compatible: true    # /insert/loki/api/v1/push enabled
+  jsonline: true           # /insert/jsonline

@@ -1,0 +1,14 @@
+[Unit]
+Description=Vexor Vector log shipper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/vexor/logs.env
+ExecStart=/usr/bin/vector --config /etc/vexor/logs/vector.toml
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Vexor Fluent Bit log shipper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/vexor/logs.env
+ExecStart=/opt/fluent-bit/bin/fluent-bit -c /etc/vexor/logs/fluentbit.conf
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

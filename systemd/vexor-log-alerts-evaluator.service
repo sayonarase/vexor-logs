@@ -1,0 +1,16 @@
+[Unit]
+Description=Vexor Logs - alert rule evaluator
+After=vexor-api.service vexor-victorialogs.service
+Wants=vexor-victorialogs.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/vexor/logs.env
+ExecStart=/usr/bin/vexor-log-alerts-evaluator
+Restart=on-failure
+RestartSec=15s
+User=vexor
+Group=vexor
+
+[Install]
+WantedBy=multi-user.target

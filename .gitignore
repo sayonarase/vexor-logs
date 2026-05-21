@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+# Node
+node_modules/
+dist/
+.vite/
+# RPM build artifacts
+rpm/BUILD/
+rpm/BUILDROOT/
+rpm/RPMS/
+rpm/SRPMS/
+rpm/SOURCES/*.tar.gz
+rpm/SOURCES/victoria-logs-*
+rpm/SOURCES/vector-*
+rpm/SOURCES/fluent-bit-*
+# Local
+.DS_Store
+*.log
