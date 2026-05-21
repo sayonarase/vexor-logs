@@ -3,26 +3,30 @@
 data_dir = "/var/lib/vector"
 
 [sources.host_files]
-type   = "file"
+type = "file"
 include = ["/var/log/messages", "/var/log/secure", "/var/log/audit/audit.log"]
 ignore_older_secs = 86400
 read_from = "end"
 
 [sources.journald]
 type = "journald"
+current_boot_only = true
 
 [transforms.tag]
-type   = "remap"
+type = "remap"
 inputs = ["host_files", "journald"]
 source = '''
-.host = get_env_var!("HOSTNAME") ?? "unknown"
-.service = .SYSTEMD_UNIT ?? .file ?? "unknown"
+.host = get_env_var("HOSTNAME") ?? "unknown"
+.service = .SYSTEMD_UNIT ?? string!(.file) ?? "unknown"
+# VictoriaLogs treats _msg as the primary message field; map Loki body.
+._msg = del(.message) ?? .MESSAGE ?? ""
 '''
 
 [sinks.victorialogs]
-type     = "loki"
-inputs   = ["tag"]
-endpoint = "${VEXOR_LOGS_URL:-http://127.0.0.1:9428}"
+type = "loki"
+inputs = ["tag"]
+endpoint = "${VEXOR_LOGS_URL:-http://127.0.0.1:9428}/insert"
 encoding.codec = "json"
-labels   = { host = "{{ host }}", service = "{{ service }}" }
+compression = "none"
+labels = { host = "{{ host }}", service = "{{ service }}" }
 out_of_order_action = "accept"
