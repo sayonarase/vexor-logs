@@ -1,0 +1,13 @@
+{
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "query": "service:~\"audit\" _msg:~\"ANOM_\"",
+  "tags": [
+    "security",
+    "linux"
+  ],
+  "name": "Audit anomalies",
+  "id": "audit-anomalies",
+  "description": "auditd ANOM_* events",
+  "suggested_severity": "warning"
+}

@@ -1,0 +1,13 @@
+{
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "query": "_msg:~\"Out of memory\" OR _msg:~\"oom-killer\"",
+  "tags": [
+    "kernel",
+    "linux"
+  ],
+  "name": "OOM killer",
+  "id": "systemd-oomkill",
+  "description": "Kernel OOM-killed a process",
+  "suggested_severity": "critical"
+}

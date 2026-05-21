@@ -1,0 +1,13 @@
+{
+  "suggested_window_sec": 600,
+  "suggested_threshold": 3,
+  "query": "_msg:~\"sudo:\" _msg:~\"authentication failure\" OR _msg:~\"NOT in sudoers\"",
+  "tags": [
+    "security",
+    "linux"
+  ],
+  "name": "sudo failures",
+  "id": "sudo-failures",
+  "description": "User attempted sudo without permission",
+  "suggested_severity": "warning"
+}

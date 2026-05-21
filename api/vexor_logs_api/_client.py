@@ -9,7 +9,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterator
 
 
 def _base() -> str:
@@ -50,7 +50,6 @@ def stream(q: str) -> Iterator[bytes]:
 
 
 def streams() -> list[dict[str, Any]]:
-    """List distinct streams VictoriaLogs knows about."""
     try:
         resp = _open("/select/logsql/streams", {"query": "*"})
         data = json.loads(resp.read().decode("utf-8"))
@@ -61,6 +60,27 @@ def streams() -> list[dict[str, Any]]:
     except Exception:
         pass
     return []
+
+
+def hits(q: str, start: str | None = None, end: str | None = None,
+         step: str = "1m") -> dict[str, Any]:
+    """Return the /select/logsql/hits histogram envelope."""
+    resp = _open("/select/logsql/hits",
+                 {"query": q, "start": start, "end": end, "step": step})
+    body = resp.read().decode("utf-8", errors="replace")
+    try:
+        return json.loads(body)
+    except Exception:
+        return {"_raw": body}
+
+
+def metrics_text() -> str:
+    """Return the raw Prometheus exposition text from VictoriaLogs."""
+    try:
+        resp = _open("/metrics", timeout=10)
+        return resp.read().decode("utf-8", errors="replace")
+    except Exception:
+        return ""
 
 
 def health() -> bool:

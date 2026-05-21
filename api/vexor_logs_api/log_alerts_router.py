@@ -1,5 +1,7 @@
-"""CRUD for log alert rules."""
+"""CRUD for log alert rules (with host_binding for Naemon passive results)."""
 from __future__ import annotations
+import logging
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -9,17 +11,19 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import LogAlertRule
+from .naemon_passive import ensure_log_service, remove_log_service, slugify_rule_name
 
 try:
     from app.database import get_db  # type: ignore
     from app.services.auth import require_operator, require_viewer  # type: ignore
-except Exception:  # pragma: no cover
+except Exception:
     def get_db():  # type: ignore
         raise RuntimeError("vexor-api context required")
     def require_operator(): return None  # type: ignore
     def require_viewer(): return None  # type: ignore
 
 
+log = logging.getLogger("vexor.logs.alerts")
 router = APIRouter(prefix="/api/v1/log-alerts", tags=["log-alerts"])
 
 
@@ -30,6 +34,7 @@ class RuleIn(BaseModel):
     threshold: int = Field(1, ge=1)
     severity: str = "warning"
     notify_to: str = ""
+    host_binding: Optional[str] = None
     enabled: bool = True
 
 
@@ -43,6 +48,7 @@ def _to_out(r: LogAlertRule) -> RuleOut:
     return RuleOut(
         id=r.id, name=r.name, query=r.query, window_sec=r.window_sec,
         threshold=r.threshold, severity=r.severity, notify_to=r.notify_to,
+        host_binding=getattr(r, "host_binding", None),
         enabled=r.enabled, last_fired=r.last_fired, last_count=r.last_count,
     )
 
@@ -64,6 +70,11 @@ async def create_rule(body: RuleIn, db: AsyncSession = Depends(get_db),
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     await db.refresh(r)
+    if r.host_binding:
+        try:
+            ensure_log_service(r.host_binding, slugify_rule_name(r.name), r.name)
+        except Exception as e:
+            log.warning("naemon ensure_log_service failed: %s", e)
     return _to_out(r)
 
 
@@ -74,16 +85,32 @@ async def update_rule(rule_id: int, body: RuleIn,
     r = await db.get(LogAlertRule, rule_id)
     if not r:
         raise HTTPException(status_code=404, detail="not found")
+    old_host = r.host_binding
+    old_slug = slugify_rule_name(r.name)
     for k, v in body.dict().items():
         setattr(r, k, v)
     await db.commit()
     await db.refresh(r)
+    # adjust naemon service if binding changed
+    try:
+        if old_host and (old_host != r.host_binding or slugify_rule_name(r.name) != old_slug):
+            remove_log_service(old_host, old_slug)
+        if r.host_binding:
+            ensure_log_service(r.host_binding, slugify_rule_name(r.name), r.name)
+    except Exception as e:
+        log.warning("naemon service sync failed: %s", e)
     return _to_out(r)
 
 
 @router.delete("/{rule_id}")
 async def delete_rule(rule_id: int, db: AsyncSession = Depends(get_db),
                       _=Depends(require_operator)):
+    r = await db.get(LogAlertRule, rule_id)
+    if r and r.host_binding:
+        try:
+            remove_log_service(r.host_binding, slugify_rule_name(r.name))
+        except Exception as e:
+            log.warning("naemon remove_log_service failed: %s", e)
     await db.execute(delete(LogAlertRule).where(LogAlertRule.id == rule_id))
     await db.commit()
     return {"ok": True}

@@ -1,0 +1,13 @@
+{
+  "suggested_window_sec": 600,
+  "suggested_threshold": 3,
+  "query": "_msg:~\"segfault at\"",
+  "tags": [
+    "kernel",
+    "linux"
+  ],
+  "name": "Process segfaults",
+  "id": "kernel-segfault",
+  "description": "Userspace process crashed via SIGSEGV",
+  "suggested_severity": "warning"
+}

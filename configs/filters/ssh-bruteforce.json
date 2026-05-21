@@ -1,0 +1,13 @@
+{
+  "suggested_window_sec": 300,
+  "suggested_threshold": 10,
+  "query": "_msg:~\"Failed password\" service:~\"sshd\"",
+  "tags": [
+    "security",
+    "linux"
+  ],
+  "name": "SSH brute-force attempts",
+  "id": "ssh-bruteforce",
+  "description": "Repeated failed SSH password attempts",
+  "suggested_severity": "warning"
+}

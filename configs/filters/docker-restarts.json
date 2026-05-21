@@ -1,0 +1,12 @@
+{
+  "suggested_window_sec": 600,
+  "suggested_threshold": 5,
+  "query": "service:~\"docker\" _msg:~\"restart\"",
+  "tags": [
+    "docker"
+  ],
+  "name": "Docker container restarts",
+  "id": "docker-restarts",
+  "description": "Container exited and was restarted",
+  "suggested_severity": "warning"
+}

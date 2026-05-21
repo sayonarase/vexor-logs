@@ -1,0 +1,12 @@
+{
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "query": "service:~\"postgres\" _msg:~\"FATAL\"",
+  "tags": [
+    "database"
+  ],
+  "name": "PostgreSQL FATAL",
+  "id": "postgres-fatal",
+  "description": "PostgreSQL FATAL messages",
+  "suggested_severity": "critical"
+}

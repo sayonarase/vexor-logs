@@ -1,0 +1,13 @@
+{
+  "suggested_window_sec": 300,
+  "suggested_threshold": 20,
+  "query": "service:~\"nginx\" _msg:~\" 5[0-9][0-9] \"",
+  "tags": [
+    "web",
+    "nginx"
+  ],
+  "name": "nginx 5xx responses",
+  "id": "nginx-5xx",
+  "description": "Server-side errors served by nginx",
+  "suggested_severity": "warning"
+}

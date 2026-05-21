@@ -1,0 +1,12 @@
+{
+  "suggested_window_sec": 300,
+  "suggested_threshold": 5,
+  "query": "service:~\"vexor-api\" _msg:~\"ERROR|Traceback\"",
+  "tags": [
+    "vexor"
+  ],
+  "name": "Vexor API errors",
+  "id": "vexor-api-errors",
+  "description": "Server-side errors in vexor-api logs",
+  "suggested_severity": "warning"
+}

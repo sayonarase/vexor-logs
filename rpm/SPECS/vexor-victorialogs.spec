@@ -7,21 +7,24 @@ AutoProv: no
 
 Name:           vexor-victorialogs
 Version:        %{vl_version}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        VictoriaLogs daemon packaged for Vexor
 License:        ASL 2.0
 URL:            https://github.com/VictoriaMetrics/VictoriaLogs
 Source0:        victoria-logs-linux-amd64-v%{vl_version}.tar.gz
 Source1:        victorialogs.yaml
 Source2:        vexor-victorialogs.service
+Source3:        vexor-victorialogs
 BuildArch:      x86_64
 Requires:       systemd
 
 %description
 VictoriaLogs is a fast, cost-effective open source log database. This package
-ships the upstream binary, a default configuration file, and a systemd unit
-configured for use as the storage backend for Vexor Logs. The HTTP API is
-bound to 127.0.0.1:9428 by default and is accessed via the Vexor API proxy.
+ships the upstream binary, a default configuration file, the
+``vexor-victorialogs`` launcher that wires /etc/vexor/logs.env knobs (such as
+``VEXOR_LOGS_RETENTION_DAYS``) into the VictoriaLogs CLI flags, and a systemd
+unit. The HTTP API is bound to 127.0.0.1:9428 by default and is accessed via
+the Vexor API proxy.
 
 %prep
 %setup -q -c -T
@@ -33,6 +36,7 @@ install -d %{buildroot}/etc/vexor/logs
 install -d %{buildroot}/var/lib/vexor/victorialogs
 install -d %{buildroot}/usr/lib/systemd/system
 install -m 0755 victoria-logs-prod %{buildroot}/usr/bin/victoria-logs
+install -m 0755 %{SOURCE3} %{buildroot}/usr/bin/vexor-victorialogs
 install -m 0644 %{SOURCE1} %{buildroot}/etc/vexor/logs/victorialogs.yaml
 install -m 0644 %{SOURCE2} %{buildroot}/usr/lib/systemd/system/vexor-victorialogs.service
 
@@ -43,6 +47,13 @@ getent passwd vexor >/dev/null || useradd -r -g vexor -d /opt/vexor -s /sbin/nol
 %post
 %systemd_post vexor-victorialogs.service
 chown -R vexor:vexor /var/lib/vexor/victorialogs
+# Ensure retention default is present in env file (vexor-logs ships the
+# canonical env file but we may be installed standalone).
+if [ -f /etc/vexor/logs.env ] && ! grep -q '^VEXOR_LOGS_RETENTION_DAYS=' /etc/vexor/logs.env; then
+    echo 'VEXOR_LOGS_RETENTION_DAYS=90' >> /etc/vexor/logs.env
+fi
+systemctl daemon-reload || :
+systemctl try-restart vexor-victorialogs.service 2>/dev/null || :
 
 %preun
 %systemd_preun vexor-victorialogs.service
@@ -52,11 +63,16 @@ chown -R vexor:vexor /var/lib/vexor/victorialogs
 
 %files
 /usr/bin/victoria-logs
+/usr/bin/vexor-victorialogs
 %config(noreplace) /etc/vexor/logs/victorialogs.yaml
 /usr/lib/systemd/system/vexor-victorialogs.service
 %dir %attr(0750,vexor,vexor) /var/lib/vexor/victorialogs
 %dir /etc/vexor/logs
 
 %changelog
+* Tue Nov 18 2026 sayonarase <sayonarase@users.noreply.github.com> - 1.50.0-2
+- Add /usr/bin/vexor-victorialogs launcher that reads /etc/vexor/logs.env
+  (VEXOR_LOGS_RETENTION_DAYS, VEXOR_LOGS_LISTEN, VEXOR_LOGS_STORAGE).
+- Service unit now sources /etc/vexor/logs.env and execs the launcher.
 * Mon Nov 17 2026 sayonarase <sayonarase@users.noreply.github.com> - 1.50.0-1
 - Initial package; ships upstream VictoriaLogs 1.50.0 for Vexor.

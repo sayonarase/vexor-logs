@@ -1,0 +1,13 @@
+{
+  "suggested_window_sec": 300,
+  "suggested_threshold": 100,
+  "query": "service:~\"firewalld\" _msg:~\"DROP\"",
+  "tags": [
+    "network",
+    "linux"
+  ],
+  "name": "firewalld dropped packets",
+  "id": "firewalld-drops",
+  "description": "High volume of dropped packets seen by firewalld",
+  "suggested_severity": "info"
+}

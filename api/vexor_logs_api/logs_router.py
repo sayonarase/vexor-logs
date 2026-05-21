@@ -1,18 +1,23 @@
-"""Read-side router: query, tail and stream discovery."""
+"""Read-side router: query, tail, stream discovery, histogram, export, test."""
 from __future__ import annotations
+import csv
+import io
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from . import _client
 
 try:
     from app.services.auth import require_viewer  # type: ignore
-except Exception:  # standalone / test
+except Exception:
     def require_viewer():  # type: ignore
         return None
+
 
 router = APIRouter(prefix="/api/v1/logs", tags=["logs"])
 
@@ -44,11 +49,9 @@ def list_streams(_=Depends(require_viewer)) -> dict:
 
 @router.get("/tail")
 def tail(query: str = Query(...), _=Depends(require_viewer)) -> StreamingResponse:
-    """Server-sent events live-tail. Each event payload is one log line."""
     def gen():
         try:
             for chunk in _client.stream(query):
-                # the VL tail endpoint emits JSONL; we re-emit as SSE
                 for line in chunk.splitlines():
                     line = line.strip()
                     if not line:
@@ -56,5 +59,137 @@ def tail(query: str = Query(...), _=Depends(require_viewer)) -> StreamingRespons
                     yield f"data: {line.decode('utf-8', 'replace') if isinstance(line, bytes) else line}\n\n"
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# Histogram
+# ---------------------------------------------------------------------------
+def _parse_iso(ts: str) -> datetime:
+    s = ts.rstrip("Z")
+    try:
+        return datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
+    except Exception:
+        raise HTTPException(400, f"bad timestamp: {ts}")
+
+
+def _choose_step(start: datetime, end: datetime, buckets: int) -> str:
+    span = max(1, int((end - start).total_seconds()))
+    step_sec = max(1, span // max(1, buckets))
+    if step_sec < 60:
+        return f"{step_sec}s"
+    if step_sec < 3600:
+        return f"{step_sec // 60}m"
+    if step_sec < 86400:
+        return f"{step_sec // 3600}h"
+    return f"{step_sec // 86400}d"
+
+
+@router.get("/histogram")
+def histogram(
+    query: str = Query(...),
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    buckets: int = Query(50, ge=2, le=500),
+    _=Depends(require_viewer),
+) -> dict:
+    now = datetime.now(timezone.utc)
+    end_dt = _parse_iso(end) if end else now
+    start_dt = _parse_iso(start) if start else end_dt - timedelta(hours=1)
+    step = _choose_step(start_dt, end_dt, buckets)
+    try:
+        data = _client.hits(query, start=start_dt.isoformat(),
+                            end=end_dt.isoformat(), step=step)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
+    out: list[dict] = []
+    total = 0
+    # VictoriaLogs /hits returns either {hits:[{timestamps, values}, ...]}
+    # or {series:[{timestamps, values}, ...]} depending on version.
+    series = (data.get("hits") if isinstance(data, dict) else None) or \
+             (data.get("series") if isinstance(data, dict) else None) or []
+    if series:
+        s0 = series[0] if isinstance(series, list) else series
+        timestamps = s0.get("timestamps") or s0.get("t") or []
+        values = s0.get("values") or s0.get("v") or []
+        for t, v in zip(timestamps, values):
+            cnt = int(v or 0)
+            out.append({"t": t, "count": cnt})
+            total += cnt
+    return {"buckets": out, "total": total, "step": step,
+            "start": start_dt.isoformat(), "end": end_dt.isoformat()}
+
+
+# ---------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------
+@router.get("/export")
+def export(
+    query: str = Query(...),
+    format: str = Query("csv", pattern="^(csv|ndjson)$"),
+    limit: int = Query(10000, ge=1, le=1000000),
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    _=Depends(require_viewer),
+):
+    try:
+        rows = _client.query(query, limit=limit, start=start, end=end)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    if format == "ndjson":
+        def gen_nd():
+            for r in rows:
+                yield (json.dumps(r, default=str) + "\n").encode()
+        return StreamingResponse(
+            gen_nd(), media_type="application/x-ndjson",
+            headers={"Content-Disposition": f'attachment; filename="logs_{ts}.ndjson"'},
+        )
+    # CSV: collect a stable column union
+    cols: list[str] = []
+    seen = set()
+    for r in rows:
+        for k in r.keys():
+            if k not in seen:
+                seen.add(k); cols.append(k)
+    if "_time" in cols:
+        cols.remove("_time"); cols.insert(0, "_time")
+    if "_msg" in cols:
+        cols.remove("_msg"); cols.append("_msg")
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+    w.writeheader()
+    for r in rows:
+        w.writerow({k: ("" if r.get(k) is None else str(r.get(k))) for k in cols})
+    data = buf.getvalue().encode("utf-8")
+    return StreamingResponse(
+        iter([data]), media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="logs_{ts}.csv"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test query (used by UI before saving a rule / search)
+# ---------------------------------------------------------------------------
+class TestQueryIn(BaseModel):
+    query: str
+    window_sec: int = Field(300, ge=10, le=86400)
+
+
+@router.post("/test-query")
+def test_query(body: TestQueryIn, _=Depends(require_viewer)) -> dict:
+    start = (datetime.now(timezone.utc) - timedelta(seconds=body.window_sec)).isoformat()
+    parse_ok = True
+    sample: list = []
+    try:
+        sample = _client.query(body.query, limit=3, start=start)
+    except Exception as e:
+        return {"matched_count": 0, "sample": [], "parse_ok": False, "error": str(e)}
+    # second call with bigger limit just to count
+    try:
+        more = _client.query(body.query, limit=1000, start=start)
+        matched = len(more)
+    except Exception:
+        matched = len(sample)
+        parse_ok = False
+    return {"matched_count": matched, "sample": sample[:3], "parse_ok": parse_ok}
