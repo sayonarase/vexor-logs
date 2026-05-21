@@ -20,7 +20,7 @@ except Exception:  # pragma: no cover
     def require_viewer(): return None  # type: ignore
 
 
-router = APIRouter(prefix="/v1/log-alerts", tags=["log-alerts"])
+router = APIRouter(prefix="/api/v1/log-alerts", tags=["log-alerts"])
 
 
 class RuleIn(BaseModel):

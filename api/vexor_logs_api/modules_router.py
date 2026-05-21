@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/v1", tags=["modules"])
+router = APIRouter(prefix="/api/v1", tags=["modules"])
 
 _MODULES = ["logs"]  # this plugin implies "logs" is available
 

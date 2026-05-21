@@ -14,7 +14,7 @@ except Exception:  # standalone / test
     def require_viewer():  # type: ignore
         return None
 
-router = APIRouter(prefix="/v1/logs", tags=["logs"])
+router = APIRouter(prefix="/api/v1/logs", tags=["logs"])
 
 
 @router.get("/health")
