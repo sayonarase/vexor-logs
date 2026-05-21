@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-vector
 Version:        0.55.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Vector agent packaged with Vexor Logs defaults
 License:        MPL-2.0
 URL:            https://vector.dev/

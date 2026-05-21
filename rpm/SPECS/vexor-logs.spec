@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        1%{?dist}
+Release:        3%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -39,7 +39,10 @@ install -m 0644 %{SOURCE2} %{buildroot}/usr/lib/systemd/system/vexor-log-alerts-
 install -d %{buildroot}/usr/bin
 cat > %{buildroot}/usr/bin/vexor-log-alerts-evaluator <<'EOS'
 #!/usr/bin/env bash
-exec /opt/vexor/api/venv/bin/python -m vexor_logs_api.evaluator "$@"
+export PYTHONPATH=/opt/vexor/api:/opt/vexor/api/plugins${PYTHONPATH:+:$PYTHONPATH}
+cd /opt/vexor/api
+set -a; [ -f /etc/vexor/db.env ] && . /etc/vexor/db.env; [ -f /etc/vexor/logs.env ] && . /etc/vexor/logs.env; set +a
+exec /opt/vexor/api/venv/bin/python -m logs.evaluator "$@"
 EOS
 chmod 0755 %{buildroot}/usr/bin/vexor-log-alerts-evaluator
 
