@@ -1,0 +1,7 @@
+#!/bin/bash
+# Strict wrapper: only allow `cpanm <Module>` with valid Perl module names.
+set -euo pipefail
+[ "$#" -eq 1 ] || { echo "usage: vexor-cpanm-install <Module::Name>" >&2; exit 2; }
+mod="$1"
+[[ "$mod" =~ ^[A-Za-z0-9:._-]+$ ]] || { echo "invalid module name: $mod" >&2; exit 2; }
+exec /usr/bin/cpanm --notest --quiet -- "$mod"

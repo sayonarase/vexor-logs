@@ -19,6 +19,8 @@ Source4:        install-linux-agent.sh
 Source5:        install-windows-agent.ps1
 Source6:        install-linux-agent-interactive.sh
 Source7:        install-windows-agent-interactive.ps1
+Source8:        vexor-cpanm-install
+Source9:        vexor-plugin-deps.sudoers
 
 Requires:       vexor-victorialogs
 Requires:       vexor-api >= 0.1.0-6
