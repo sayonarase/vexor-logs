@@ -1,3 +1,4 @@
+import logging
 """Filter library — curated starter queries shipped as JSON in /etc/vexor/logs/filters/."""
 from __future__ import annotations
 import json
@@ -27,6 +28,8 @@ except Exception:
     def require_viewer(): return None  # type: ignore
     def get_principal(): return None  # type: ignore
 
+
+log = logging.getLogger("vexor.logs.filter_library")
 
 router = APIRouter(prefix="/api/v1/logs/filter-library", tags=["logs-filter-library"])
 
@@ -111,9 +114,23 @@ async def install(body: InstallIn, db: AsyncSession = Depends(get_db),
         await db.rollback()
         raise HTTPException(400, str(e))
     await db.refresh(row)
+    naemon_warning = None
     if row.host_binding:
         try:
             ensure_log_service(row.host_binding, slugify_rule_name(row.name), row.name)
-        except Exception:
-            pass
-    return {"ok": True, "kind": "log-alert", "item": _alert_to_out(row).dict()}
+        except InvalidHostName as e:
+            await db.delete(row)
+            await db.commit()
+            raise HTTPException(400, f"invalid host_binding: {e}")
+        except Exception as e:
+            log.exception("ensure_log_service failed for rule id=%s host=%s",
+                          row.id, row.host_binding)
+            naemon_warning = (
+                "Rule saved, but the passive Naemon service could not be created: "
+                f"{type(e).__name__}: {e}. Alerts will not surface in Naemon "
+                "until this is resolved."
+            )
+    out = {"ok": True, "kind": "log-alert", "item": _alert_to_out(row).dict()}
+    if naemon_warning:
+        out["warning"] = naemon_warning
+    return out

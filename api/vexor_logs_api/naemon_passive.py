@@ -39,6 +39,20 @@ define service {{
 """
 
 
+_HOST_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,253}$")
+
+
+class InvalidHostName(ValueError):
+    pass
+
+
+def _validate_host_name(host: str) -> str:
+    """Reject anything that could escape the Naemon config template."""
+    if not host or not _HOST_NAME_RE.match(host):
+        raise InvalidHostName(f"invalid host name: {host!r}")
+    return host
+
+
 def slugify_rule_name(name: str) -> str:
     s = re.sub(r"[^A-Za-z0-9]+", "_", name.strip()).strip("_").lower()
     return s[:60] or "rule"
@@ -99,8 +113,7 @@ def _reload_naemon() -> None:
 
 def ensure_log_service(host: str, rule_slug: str, rule_name: str) -> None:
     """Create or refresh the passive service stanza and reload naemon."""
-    if not host:
-        return
+    host = _validate_host_name(host)
     key = _key(host, rule_slug)
     svc = service_name(rule_slug)
     block = _SVC_TEMPLATE.format(begin=_BEGIN, end=_END, key=key,
@@ -116,6 +129,10 @@ def ensure_log_service(host: str, rule_slug: str, rule_name: str) -> None:
 
 def remove_log_service(host: str, rule_slug: str) -> None:
     if not host:
+        return
+    try:
+        host = _validate_host_name(host)
+    except InvalidHostName:
         return
     key = _key(host, rule_slug)
     blocks = _read_blocks()

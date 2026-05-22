@@ -135,6 +135,7 @@ def _ssh_run(host: str, port: int, user: str,
 
 @router.post("/deploy-shipper")
 def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
+    _decrypted_key_path = None
     if body.transport == "winrm":
         target = "windows"
         url = body.vexor_url or _public_url()
@@ -206,15 +207,24 @@ def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
                 else:
                     import tempfile
                     tf = tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".key")
-                    tf.write(pk); tf.close()
-                    os.chmod(tf.name, 0o600)
+                    try:
+                        tf.write(pk); tf.close()
+                        os.chmod(tf.name, 0o600)
+                    except Exception:
+                        try: os.unlink(tf.name)
+                        except Exception: pass
+                        raise
                     key = tf.name
+                    _decrypted_key_path = key  # cleaned up in finally below
                 if pw and not key:
                     password = pw
         except Exception as e:
             log.warning("credential lookup failed: %s", e)
 
     if not key and not password:
+        if _decrypted_key_path:
+            try: os.unlink(_decrypted_key_path)
+            except Exception: pass
         raise HTTPException(400, "no SSH credential available (need key or password)")
 
     try:
@@ -235,18 +245,23 @@ def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
         remote = f"sudo bash -s -- {" ".join(args)}" if user != "root" else f"bash -s -- {" ".join(args)}"
         stdin_payload = scr.encode("utf-8")
 
-    rc, out, err = _ssh_run(target_host, body.port, user,
-                            key_path=key, password=password,
-                            remote_cmd=remote, stdin=stdin_payload)
-    return {
-        "ok": rc == 0,
-        "rc": rc,
-        "stdout": out[-8000:],
-        "stderr": err[-8000:],
-        "host": target_host,
-        "user": user,
-        "agent": body.agent,
-    }
+    try:
+        rc, out, err = _ssh_run(target_host, body.port, user,
+                                key_path=key, password=password,
+                                remote_cmd=remote, stdin=stdin_payload)
+        return {
+            "ok": rc == 0,
+            "rc": rc,
+            "stdout": out[-8000:],
+            "stderr": err[-8000:],
+            "host": target_host,
+            "user": user,
+            "agent": body.agent,
+        }
+    finally:
+        if _decrypted_key_path:
+            try: os.unlink(_decrypted_key_path)
+            except Exception: pass
 
 from fastapi.responses import PlainTextResponse, Response
 

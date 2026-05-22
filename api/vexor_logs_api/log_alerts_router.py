@@ -11,7 +11,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import LogAlertRule
-from .naemon_passive import ensure_log_service, remove_log_service, slugify_rule_name
+from .naemon_passive import ensure_log_service, remove_log_service, slugify_rule_name, InvalidHostName
 
 try:
     from app.database import get_db  # type: ignore
@@ -73,6 +73,8 @@ async def create_rule(body: RuleIn, db: AsyncSession = Depends(get_db),
     if r.host_binding:
         try:
             ensure_log_service(r.host_binding, slugify_rule_name(r.name), r.name)
+        except InvalidHostName as e:
+            raise HTTPException(400, f"invalid host_binding: {e}")
         except Exception as e:
             log.warning("naemon ensure_log_service failed: %s", e)
     return _to_out(r)
@@ -97,6 +99,8 @@ async def update_rule(rule_id: int, body: RuleIn,
             remove_log_service(old_host, old_slug)
         if r.host_binding:
             ensure_log_service(r.host_binding, slugify_rule_name(r.name), r.name)
+    except InvalidHostName as e:
+        raise HTTPException(400, f"invalid host_binding: {e}")
     except Exception as e:
         log.warning("naemon service sync failed: %s", e)
     return _to_out(r)

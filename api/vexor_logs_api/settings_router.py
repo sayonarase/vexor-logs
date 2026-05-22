@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AnyHttpUrl
 
 from . import _client
 
@@ -31,7 +31,7 @@ DEFAULT_RETENTION = 90
 
 class Settings(BaseModel):
     retention_days: int = Field(DEFAULT_RETENTION, ge=1, le=3650)
-    vexor_logs_url: Optional[str] = None
+    vexor_logs_url: Optional[AnyHttpUrl] = None
 
 
 def _read_env() -> dict[str, str]:
@@ -67,12 +67,6 @@ def _write_env(updates: dict[str, str]) -> None:
             new_lines.append(f"{k}={v}")
     ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
     ENV_FILE.write_text("\n".join(new_lines).rstrip() + "\n")
-    try:
-        os.chmod(ENV_FILE, 0o644)
-    except Exception:
-        pass
-
-
 def _current_settings() -> Settings:
     env = _read_env()
     try:
@@ -109,10 +103,31 @@ def put_settings(body: Settings, _=Depends(require_admin)) -> Settings:
     try:
         r = subprocess.run(cmd, check=False, timeout=20, capture_output=True)
         if r.returncode != 0:
-            log.warning("victorialogs restart rc=%s stderr=%s",
-                        r.returncode, r.stderr.decode(errors="replace")[:300])
+            stderr_txt = (r.stderr or b"").decode(errors="replace").strip()
+            log.warning("vexor-victorialogs restart failed rc=%s stderr=%s",
+                        r.returncode, stderr_txt[:300])
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "restart_failed",
+                    "message": ("Settings were saved but vexor-victorialogs failed to restart. "
+                                "The configured retention is not yet active on the running daemon."),
+                    "rc": r.returncode,
+                    "stderr": stderr_txt[:500],
+                },
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         log.warning("victorialogs restart failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "restart_exception",
+                "message": "Settings were saved but the restart command could not be executed.",
+                "exception": f"{type(e).__name__}: {e}",
+            },
+        )
     return _current_settings()
 
 
