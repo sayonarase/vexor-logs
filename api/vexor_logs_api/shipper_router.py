@@ -247,3 +247,41 @@ def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
         "user": user,
         "agent": body.agent,
     }
+
+from fastapi.responses import PlainTextResponse, Response
+
+_ALLOWED_SCRIPTS = {
+    "install-linux-agent.sh":              ("text/x-shellscript", "linux"),
+    "install-linux-agent-interactive.sh":  ("text/x-shellscript", "linux"),
+    "install-windows-agent.ps1":           ("text/x-powershell",  "windows"),
+    "install-windows-agent-interactive.ps1": ("text/x-powershell","windows"),
+}
+
+@router.get("/install-scripts")
+def list_install_scripts() -> dict:
+    out = []
+    for name, (ctype, os_) in _ALLOWED_SCRIPTS.items():
+        p = INSTALL_SCRIPT_DIR / name
+        out.append({
+            "name": name, "os": os_, "content_type": ctype,
+            "available": p.exists(),
+            "size": p.stat().st_size if p.exists() else 0,
+            "interactive": "interactive" in name,
+            "url": f"/api/v1/logs/install-scripts/{name}",
+        })
+    return {"scripts": out}
+
+@router.get("/install-scripts/{name}")
+def serve_install_script(name: str):
+    meta = _ALLOWED_SCRIPTS.get(name)
+    if not meta:
+        raise HTTPException(404, "unknown install script")
+    p = INSTALL_SCRIPT_DIR / name
+    if not p.exists():
+        raise HTTPException(404, "install script not packaged")
+    return Response(
+        content=p.read_bytes(),
+        media_type=meta[0],
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
