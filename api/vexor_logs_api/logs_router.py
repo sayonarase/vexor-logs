@@ -319,3 +319,39 @@ def histogram_by(
     return {"field": field, "step": step, "series": series,
             "start": start_dt.isoformat(), "end": end_dt.isoformat()}
 
+@router.get("/heatmap")
+def heatmap(
+    query: str = Query("*"),
+    days: int = Query(7, ge=1, le=31),
+    _=Depends(require_viewer),
+) -> dict:
+    """Hour-of-day x day-of-week activity heatmap over the last N days.
+
+    Always uses a fixed 1h bucket regardless of the user's time window
+    (Splunk-style: it characterises *patterns*, not absolute counts in
+    the current selection).
+    """
+    end_dt = datetime.now(timezone.utc)
+    start_dt = end_dt - timedelta(days=days)
+    q = _safe_query(query)
+    try:
+        data = _client.hits(q, start=start_dt.isoformat(),
+                            end=end_dt.isoformat(), step="1h")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
+    series = (data.get("hits") or data.get("series") or [{}])[0] if isinstance(data, dict) else {}
+    ts = series.get("timestamps") or series.get("t") or []
+    vs = series.get("values") or series.get("v") or []
+    # grid[dow 0..6 mon..sun][hour 0..23] = count
+    grid = [[0] * 24 for _ in range(7)]
+    from datetime import datetime as _dt
+    for t, c in zip(ts, vs):
+        try:
+            d = _dt.fromisoformat(str(t).replace("Z", "+00:00"))
+            dow = d.weekday()
+            grid[dow][d.hour] += int(c or 0)
+        except Exception:
+            continue
+    return {"grid": grid, "days": days,
+            "start": start_dt.isoformat(), "end": end_dt.isoformat()}
+
