@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # vexor-victorialogs — launcher that wires /etc/vexor/logs.env knobs into the
-# VictoriaLogs CLI flags. Invoked by the systemd unit.
+# VictoriaLogs CLI flags. Invoked by the systemd unit AND by hand for debug.
 set -eu
+
+# Source the env file so manual invocations see the same knobs that
+# systemd does via EnvironmentFile=. Missing/unreadable -> use defaults.
+if [ -r /etc/vexor/logs.env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . /etc/vexor/logs.env
+    set +a
+fi
 
 : "${VEXOR_LOGS_RETENTION_DAYS:=90}"
 : "${VEXOR_LOGS_LISTEN:=127.0.0.1:9428}"
 : "${VEXOR_LOGS_STORAGE:=/var/lib/vexor/victorialogs}"
 
-exec /usr/bin/victoria-logs \
-    -storageDataPath="${VEXOR_LOGS_STORAGE}" \
-    -retentionPeriod="${VEXOR_LOGS_RETENTION_DAYS}d" \
-    -httpListenAddr="${VEXOR_LOGS_LISTEN}" \
-    -loggerOutput=stdout
+exec /usr/bin/victoria-logs     -storageDataPath="${VEXOR_LOGS_STORAGE}"     -retentionPeriod="${VEXOR_LOGS_RETENTION_DAYS}d"     -httpListenAddr="${VEXOR_LOGS_LISTEN}"     -loggerOutput=stdout

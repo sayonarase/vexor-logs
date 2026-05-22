@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -17,6 +17,8 @@ Source2:        log-alerts-evaluator.service
 Source3:        vexor-logs-filters.tar.gz
 Source4:        install-linux-agent.sh
 Source5:        install-windows-agent.ps1
+Source6:        install-linux-agent-interactive.sh
+Source7:        install-windows-agent-interactive.ps1
 
 Requires:       vexor-victorialogs
 Requires:       vexor-api >= 0.1.0-6
@@ -50,6 +52,8 @@ install -m 0644 %{SOURCE2} %{buildroot}/usr/lib/systemd/system/vexor-log-alerts-
 install -d %{buildroot}/opt/vexor/api/plugins/logs/install-scripts
 install -m 0755 %{SOURCE4} %{buildroot}/opt/vexor/api/plugins/logs/install-scripts/install-linux-agent.sh
 install -m 0644 %{SOURCE5} %{buildroot}/opt/vexor/api/plugins/logs/install-scripts/install-windows-agent.ps1
+install -m 0755 %{SOURCE6} %{buildroot}/opt/vexor/api/plugins/logs/install-scripts/install-linux-agent-interactive.sh
+install -m 0644 %{SOURCE7} %{buildroot}/opt/vexor/api/plugins/logs/install-scripts/install-windows-agent-interactive.ps1
 
 install -d %{buildroot}/usr/bin
 cat > %{buildroot}/usr/bin/vexor-log-alerts-evaluator <<'EOS'
@@ -97,6 +101,12 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/bin/vexor-log-alerts-evaluator
 
 %changelog
+* Fri May 22 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-5
+- Bundle install-linux-agent-interactive.sh and install-windows-agent-interactive.ps1
+  (previously hand-copied; now RPM-owned and served by /api/v1/logs/install-scripts).
+- Backend: validate host_binding (prevents Naemon object injection), AnyHttpUrl
+  validation on vexor_logs_url, atomic logs.env writes, surface vexor-victorialogs
+  restart failure as HTTP 500, clean up decrypted SSH keys in shipper /tmp.
 * Tue Nov 18 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-4
 - Ship settings/storage/saved-searches/histogram/export/test-query/
   filter-library/shipper-deploy routers and the naemon passive helper.
