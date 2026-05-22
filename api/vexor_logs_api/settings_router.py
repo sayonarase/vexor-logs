@@ -99,10 +99,18 @@ def put_settings(body: Settings, _=Depends(require_admin)) -> Settings:
         _write_env(updates)
     except PermissionError as e:
         raise HTTPException(500, f"cannot write {ENV_FILE}: {e}")
-    # Best-effort restart of victorialogs so the new retention takes effect.
+    # Restart victorialogs so -retentionPeriod is re-applied. We run as the
+    # vexor user, so use sudo (a NOPASSWD rule in /etc/sudoers.d/vexor-logs
+    # whitelists exactly this command).
+    import os as _os
+    cmd = ["systemctl", "restart", "vexor-victorialogs"]
+    if _os.geteuid() != 0:
+        cmd = ["sudo", "-n"] + cmd
     try:
-        subprocess.run(["systemctl", "restart", "vexor-victorialogs"],
-                       check=False, timeout=20, capture_output=True)
+        r = subprocess.run(cmd, check=False, timeout=20, capture_output=True)
+        if r.returncode != 0:
+            log.warning("victorialogs restart rc=%s stderr=%s",
+                        r.returncode, r.stderr.decode(errors="replace")[:300])
     except Exception as e:
         log.warning("victorialogs restart failed: %s", e)
     return _current_settings()
