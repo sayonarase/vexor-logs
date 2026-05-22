@@ -47,6 +47,9 @@ trap 'on_err $LINENO' ERR
 
 VEXOR_HOST="$(echo "$URL" | sed -E 's#^https?://##; s#/.*##')"
 HOST_NAME="$(hostname)"
+HOST_ADDR="$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')"
+[[ -z "$HOST_ADDR" ]] && HOST_ADDR="$(hostname -I 2>/dev/null | awk '{print $1}')"
+[[ -z "$HOST_ADDR" ]] && HOST_ADDR="unknown"
 
 log "Installing $AGENT on $HOST_NAME -> $URL"
 log "  log paths: ${LOGS[*]}"
@@ -168,12 +171,13 @@ type    = "remap"
 inputs  = ["files", "journald"]
 source  = '''
 .host = "${HOST_NAME}"
+.address = "${HOST_ADDR}"
 '''
 
 [sinks.vexor]
 type    = "http"
 inputs  = ["add_host"]
-uri     = "${URL}/api/v1/logs/push?_stream_fields=host,file&_msg_field=message&_time_field=timestamp"
+uri     = "${URL}/api/v1/logs/push?_stream_fields=host,address,file&_msg_field=message&_time_field=timestamp"
 encoding.codec = "json"
 framing.method = "newline_delimited"
 compression = "gzip"
