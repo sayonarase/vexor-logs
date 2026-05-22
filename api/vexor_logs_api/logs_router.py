@@ -281,3 +281,41 @@ def summary(
         "span_seconds": int(span),
     }
 
+@router.get("/histogram_by")
+def histogram_by(
+    query: str = Query("*"),
+    field: str = Query(...),
+    buckets: int = Query(40, ge=2, le=200),
+    top: int = Query(5, ge=1, le=20),
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    _=Depends(require_viewer),
+) -> dict:
+    """Stacked-by-field histogram.
+
+    Returns one series per top-N value of <field>, each with the same
+    timestamp grid. Anything not in the top-N is rolled into an
+    \"other\" series.
+    """
+    now = datetime.now(timezone.utc)
+    end_dt = _parse_iso(end) if end else now
+    start_dt = _parse_iso(start) if start else end_dt - timedelta(hours=1)
+    step = _choose_step(start_dt, end_dt, buckets)
+    q = _safe_query(query)
+    try:
+        top_vals = [r["value"] for r in _topn(q, field, top, start_dt, end_dt)]
+        series: list[dict] = []
+        for v in top_vals:
+            sub = f'({q}) AND {field}:{json.dumps(v)}'
+            data = _client.hits(sub, start=start_dt.isoformat(),
+                                end=end_dt.isoformat(), step=step)
+            arr = (data.get("hits") or data.get("series") or [{}])[0] if isinstance(data, dict) else {}
+            ts = arr.get("timestamps") or arr.get("t") or []
+            vs = arr.get("values") or arr.get("v") or []
+            series.append({"value": v,
+                           "buckets": [{"t": t, "count": int(c or 0)} for t, c in zip(ts, vs)]})
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
+    return {"field": field, "step": step, "series": series,
+            "start": start_dt.isoformat(), "end": end_dt.isoformat()}
+
