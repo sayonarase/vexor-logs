@@ -193,3 +193,91 @@ def test_query(body: TestQueryIn, _=Depends(require_viewer)) -> dict:
         matched = len(sample)
         parse_ok = False
     return {"matched_count": matched, "sample": sample[:3], "parse_ok": parse_ok}
+
+# ---------------------------------------------------------------------------
+# Dashboard helpers: top-N field values and summary KPIs
+# ---------------------------------------------------------------------------
+
+def _safe_query(q: str) -> str:
+    q = (q or "*").strip()
+    if not q:
+        q = "*"
+    return q
+
+
+def _topn(query: str, field: str, limit: int, start_dt, end_dt) -> list[dict]:
+    pipe = f'{_safe_query(query)} | stats by ({field}) count() as c | sort by (c) desc | limit {int(limit)}'
+    rows = _client.query(pipe, limit=limit + 5,
+                         start=start_dt.isoformat(), end=end_dt.isoformat())
+    out: list[dict] = []
+    for r in rows or []:
+        v = r.get(field)
+        if v is None or v == "":
+            v = "(empty)"
+        try:
+            c = int(r.get("c") or 0)
+        except (TypeError, ValueError):
+            c = 0
+        out.append({"value": str(v), "count": c})
+    return out
+
+
+@router.get("/top")
+def top_values(
+    query: str = Query("*"),
+    field: str = Query(...),
+    limit: int = Query(10, ge=1, le=100),
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    _=Depends(require_viewer),
+) -> dict:
+    now = datetime.now(timezone.utc)
+    end_dt = _parse_iso(end) if end else now
+    start_dt = _parse_iso(start) if start else end_dt - timedelta(hours=1)
+    try:
+        rows = _topn(query, field, limit, start_dt, end_dt)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
+    return {"field": field, "rows": rows,
+            "start": start_dt.isoformat(), "end": end_dt.isoformat()}
+
+
+@router.get("/summary")
+def summary(
+    query: str = Query("*"),
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    _=Depends(require_viewer),
+) -> dict:
+    now = datetime.now(timezone.utc)
+    end_dt = _parse_iso(end) if end else now
+    start_dt = _parse_iso(start) if start else end_dt - timedelta(hours=1)
+    span = max(1.0, (end_dt - start_dt).total_seconds())
+    q = _safe_query(query)
+    try:
+        # total
+        trows = _client.query(f"{q} | stats count() as c", limit=2,
+                              start=start_dt.isoformat(), end=end_dt.isoformat())
+        total = int((trows or [{}])[0].get("c") or 0)
+        # error count - severity field plus common synonyms
+        err_q = (f'({q}) AND (severity:(error OR critical OR alert OR emergency OR fatal) '
+                 f'OR level:(error OR critical OR fatal) '
+                 f'OR _msg:(error OR critical OR fatal))')
+        erows = _client.query(f"{err_q} | stats count() as c", limit=2,
+                              start=start_dt.isoformat(), end=end_dt.isoformat())
+        errors = int((erows or [{}])[0].get("c") or 0)
+        # unique hosts
+        hrows = _topn(q, "host", 1000, start_dt, end_dt)
+        unique_hosts = len(hrows)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
+    return {
+        "total": total,
+        "errors": errors,
+        "unique_hosts": unique_hosts,
+        "events_per_minute": round(total / (span / 60.0), 2),
+        "start": start_dt.isoformat(),
+        "end": end_dt.isoformat(),
+        "span_seconds": int(span),
+    }
+
