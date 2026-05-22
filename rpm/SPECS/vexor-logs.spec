@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        5%{?dist}
+Release:        7%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -21,6 +21,9 @@ Source6:        install-linux-agent-interactive.sh
 Source7:        install-windows-agent-interactive.ps1
 Source8:        vexor-cpanm-install
 Source9:        vexor-plugin-deps.sudoers
+Source10:       91-vexor-victorialogs.rules
+Source11:       002_post_v0.1.0-5_schema_drift.sql
+Source12:       vexor-logs-postinstall.sh
 
 Requires:       vexor-victorialogs
 Requires:       vexor-api >= 0.1.0-6
@@ -67,6 +70,12 @@ exec /opt/vexor/api/venv/bin/python -m logs.evaluator "$@"
 EOS
 chmod 0755 %{buildroot}/usr/bin/vexor-log-alerts-evaluator
 
+install -Dpm 0755 %{SOURCE8}  %{buildroot}/usr/local/sbin/vexor-cpanm-install
+install -Dpm 0440 %{SOURCE9}  %{buildroot}/etc/sudoers.d/vexor-plugin-deps
+install -Dpm 0644 %{SOURCE10} %{buildroot}/etc/polkit-1/rules.d/91-vexor-victorialogs.rules
+install -Dpm 0644 %{SOURCE11} %{buildroot}/usr/share/vexor-logs/migrations/002_post_v0.1.0-5_schema_drift.sql
+install -Dpm 0755 %{SOURCE12} %{buildroot}/usr/share/vexor-logs/vexor-logs-postinstall.sh
+
 %post
 %systemd_post vexor-log-alerts-evaluator.service
 if [ ! -f /etc/vexor/logs.env ]; then
@@ -85,6 +94,14 @@ if [ -d /opt/vexor/api/venv/lib ]; then
         ln -sf /opt/vexor/api/plugins/logs/vexor_logs_api "$SP/vexor_logs_api"
     fi
 fi
+# Reload polkit so bundled rule takes effect (v0.1.0-7)
+systemctl reload polkit 2>/dev/null || systemctl restart polkit 2>/dev/null || :
+
+# Apply DB schema drift migrations - idempotent (v0.1.0-7)
+if [ -x /usr/share/vexor-logs/vexor-logs-postinstall.sh ]; then
+    /usr/share/vexor-logs/vexor-logs-postinstall.sh || :
+fi
+
 systemctl try-restart vexor-api.service 2>/dev/null || :
 
 %preun
@@ -102,7 +119,27 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/lib/systemd/system/vexor-log-alerts-evaluator.service
 /usr/bin/vexor-log-alerts-evaluator
 
+/usr/local/sbin/vexor-cpanm-install
+%attr(0440,root,root) /etc/sudoers.d/vexor-plugin-deps
+/etc/polkit-1/rules.d/91-vexor-victorialogs.rules
+%dir /usr/share/vexor-logs
+%dir /usr/share/vexor-logs/migrations
+/usr/share/vexor-logs/migrations/002_post_v0.1.0-5_schema_drift.sql
+/usr/share/vexor-logs/vexor-logs-postinstall.sh
+
 %changelog
+* Fri May 22 2026 Copilot <copilot@vexor> - 0.1.0-7
+- Ship polkit rule (91-vexor-victorialogs.rules) so vexor user can restart
+  victorialogs without sudo (sudo blocked by NoNewPrivileges hardening).
+- Ship vexor-cpanm-install wrapper + tightened sudoers (NOPASSWD only on
+  the wrapper which validates Perl module names; replaces wildcards).
+- Ship schema-drift migration (hosts.last_state, report_schedules.name/
+  params/enabled/last_status) + postinstall script that applies migrations
+  and reloads polkit on every upgrade.
+- naemon_passive: verify host_binding refers to a known Naemon host before
+  writing the service stanza; surface reload failures back to API caller
+  (HTTP 409) and roll back broken stanzas so naemon never gets stuck.
+
 * Fri May 22 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-5
 - Bundle install-linux-agent-interactive.sh and install-windows-agent-interactive.ps1
   (previously hand-copied; now RPM-owned and served by /api/v1/logs/install-scripts).

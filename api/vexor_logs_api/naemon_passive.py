@@ -46,6 +46,16 @@ class InvalidHostName(ValueError):
     pass
 
 
+class UnknownHost(ValueError):
+    """host_binding refers to a host that is not configured in Naemon."""
+    pass
+
+
+class NaemonReloadFailed(RuntimeError):
+    """Naemon rejected the new config; the broken stanza has been rolled back."""
+    pass
+
+
 def _validate_host_name(host: str) -> str:
     """Reject anything that could escape the Naemon config template."""
     if not host or not _HOST_NAME_RE.match(host):
@@ -102,18 +112,75 @@ def _write_blocks(blocks: dict[str, str]) -> None:
         pass
 
 
-def _reload_naemon() -> None:
-    # Prefer systemctl reload; ignore failures (e.g. dev/test environments).
+def _reload_naemon() -> tuple[bool, str]:
+    """Reload naemon. Returns (ok, stderr). Never raises."""
+    # Verify the file is syntactically valid first; that gives a much clearer
+    # stderr than the post-reload "control process exited" from systemd.
     try:
-        subprocess.run(["systemctl", "reload", "naemon"], check=False,
-                       timeout=15, capture_output=True)
-    except Exception:
+        r = subprocess.run(["naemon", "-v", "/etc/naemon/naemon.cfg"],
+                           check=False, timeout=20, capture_output=True)
+        if r.returncode != 0:
+            err = (r.stderr or b"").decode(errors="replace")
+            out = (r.stdout or b"").decode(errors="replace")
+            return False, (err + out).strip()[:1000]
+    except FileNotFoundError:
+        # naemon binary not on PATH (dev env) - skip verification, try reload anyway
         pass
+    except Exception as e:
+        return False, f"naemon -v failed: {e}"
+    try:
+        r = subprocess.run(["systemctl", "reload", "naemon"],
+                           check=False, timeout=15, capture_output=True)
+        if r.returncode != 0:
+            err = (r.stderr or b"").decode(errors="replace")
+            return False, err.strip()[:1000] or f"systemctl reload rc={r.returncode}"
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def host_exists(host: str) -> bool:
+    """Check if a host is configured in Naemon by scanning generated cfgs.
+
+    We look at /var/cache/naemon/objects.cache (compiled object index) which
+    is regenerated on each successful reload, then fall back to any
+    host_name definition under /etc/naemon/vexor/hosts/.
+    """
+    try:
+        # Fast path: objects.cache is plain text and lists every parsed host.
+        cache = Path("/var/cache/naemon/objects.cache")
+        if cache.exists():
+            needle = f"host_name\t{host}"
+            with cache.open() as fh:
+                for line in fh:
+                    if needle in line or line.strip() == f"host_name {host}":
+                        return True
+        # Fallback for fresh installs: scan /etc/naemon/vexor/hosts/
+        hosts_dir = Path("/etc/naemon/vexor/hosts")
+        if hosts_dir.exists():
+            pattern = re.compile(rf"^\s*host_name\s+{re.escape(host)}\s*$", re.M)
+            for cfg in hosts_dir.glob("*.cfg"):
+                try:
+                    if pattern.search(cfg.read_text()):
+                        return True
+                except OSError:
+                    continue
+    except Exception:
+        return True  # be permissive on errors; rely on _reload_naemon to catch real breakage
+    return False
 
 
 def ensure_log_service(host: str, rule_slug: str, rule_name: str) -> None:
-    """Create or refresh the passive service stanza and reload naemon."""
+    """Create or refresh the passive service stanza and reload naemon.
+
+    Raises:
+        InvalidHostName - host_binding fails strict regex
+        UnknownHost     - host_binding is not a known Naemon host
+        NaemonReloadFailed - new config rejected; previous stanza restored
+    """
     host = _validate_host_name(host)
+    if not host_exists(host):
+        raise UnknownHost(host)
     key = _key(host, rule_slug)
     svc = service_name(rule_slug)
     block = _SVC_TEMPLATE.format(begin=_BEGIN, end=_END, key=key,
@@ -124,7 +191,16 @@ def ensure_log_service(host: str, rule_slug: str, rule_name: str) -> None:
         return
     blocks[key] = block
     _write_blocks(blocks)
-    _reload_naemon()
+    ok, err = _reload_naemon()
+    if not ok:
+        # Roll back the stanza so naemon can be brought back up.
+        if existing is None:
+            blocks.pop(key, None)
+        else:
+            blocks[key] = existing
+        _write_blocks(blocks)
+        _reload_naemon()
+        raise NaemonReloadFailed(err)
 
 
 def remove_log_service(host: str, rule_slug: str) -> None:
@@ -137,9 +213,15 @@ def remove_log_service(host: str, rule_slug: str) -> None:
     key = _key(host, rule_slug)
     blocks = _read_blocks()
     if key in blocks:
-        blocks.pop(key)
+        existing = blocks.pop(key)
         _write_blocks(blocks)
-        _reload_naemon()
+        ok, err = _reload_naemon()
+        if not ok:
+            # Restore so we don't leave naemon broken; let caller see the error.
+            blocks[key] = existing
+            _write_blocks(blocks)
+            _reload_naemon()
+            raise NaemonReloadFailed(err)
 
 
 def _sanitize(s: str) -> str:

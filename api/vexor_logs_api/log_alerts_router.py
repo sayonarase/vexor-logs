@@ -11,7 +11,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import LogAlertRule
-from .naemon_passive import ensure_log_service, remove_log_service, slugify_rule_name, InvalidHostName
+from .naemon_passive import ensure_log_service, remove_log_service, slugify_rule_name, InvalidHostName, UnknownHost, NaemonReloadFailed
 
 try:
     from app.database import get_db  # type: ignore
@@ -74,7 +74,17 @@ async def create_rule(body: RuleIn, db: AsyncSession = Depends(get_db),
         try:
             ensure_log_service(r.host_binding, slugify_rule_name(r.name), r.name)
         except InvalidHostName as e:
+            await db.execute(delete(LogAlertRule).where(LogAlertRule.id == r.id))
+            await db.commit()
             raise HTTPException(400, f"invalid host_binding: {e}")
+        except UnknownHost as e:
+            await db.execute(delete(LogAlertRule).where(LogAlertRule.id == r.id))
+            await db.commit()
+            raise HTTPException(400, f"host_binding refers to unknown Naemon host: {e}")
+        except NaemonReloadFailed as e:
+            await db.execute(delete(LogAlertRule).where(LogAlertRule.id == r.id))
+            await db.commit()
+            raise HTTPException(409, f"naemon refused config: {e}")
         except Exception as e:
             log.warning("naemon ensure_log_service failed: %s", e)
     return _to_out(r)
@@ -101,6 +111,10 @@ async def update_rule(rule_id: int, body: RuleIn,
             ensure_log_service(r.host_binding, slugify_rule_name(r.name), r.name)
     except InvalidHostName as e:
         raise HTTPException(400, f"invalid host_binding: {e}")
+    except UnknownHost as e:
+        raise HTTPException(400, f"host_binding refers to unknown Naemon host: {e}")
+    except NaemonReloadFailed as e:
+        raise HTTPException(409, f"naemon refused config: {e}")
     except Exception as e:
         log.warning("naemon service sync failed: %s", e)
     return _to_out(r)
@@ -113,6 +127,8 @@ async def delete_rule(rule_id: int, db: AsyncSession = Depends(get_db),
     if r and r.host_binding:
         try:
             remove_log_service(r.host_binding, slugify_rule_name(r.name))
+        except NaemonReloadFailed as e:
+            log.warning("naemon reload failed after remove: %s", e)
         except Exception as e:
             log.warning("naemon remove_log_service failed: %s", e)
     await db.execute(delete(LogAlertRule).where(LogAlertRule.id == rule_id))
