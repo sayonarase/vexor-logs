@@ -96,10 +96,9 @@ def put_settings(body: Settings, _=Depends(require_admin)) -> Settings:
     # Restart victorialogs so -retentionPeriod is re-applied. We run as the
     # vexor user, so use sudo (a NOPASSWD rule in /etc/sudoers.d/vexor-logs
     # whitelists exactly this command).
-    import os as _os
+    # Non-root systemctl restart works via polkit rule
+    # /etc/polkit-1/rules.d/91-vexor-victorialogs.rules
     cmd = ["systemctl", "restart", "vexor-victorialogs"]
-    if _os.geteuid() != 0:
-        cmd = ["sudo", "-n"] + cmd
     try:
         r = subprocess.run(cmd, check=False, timeout=20, capture_output=True)
         if r.returncode != 0:

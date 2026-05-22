@@ -1,6 +1,6 @@
-import logging
 """Filter library — curated starter queries shipped as JSON in /etc/vexor/logs/filters/."""
 from __future__ import annotations
+import logging
 import json
 import os
 from pathlib import Path
