@@ -32,6 +32,38 @@ except Exception:
 
 
 log = logging.getLogger("vexor.logs.shipper")
+def _db_query_one(sql: str, params: dict):
+    import os, pymysql
+    from urllib.parse import urlparse
+    url = os.environ.get("VEXOR_DB_URL", "")
+    if not url:
+        # try reading /etc/vexor/db.env
+        try:
+            for ln in open("/etc/vexor/db.env"):
+                if ln.startswith("VEXOR_DB_URL="):
+                    url = ln.split("=", 1)[1].strip()
+                    break
+        except Exception:
+            pass
+    if not url:
+        return None
+    u = urlparse(url.replace("mysql+pymysql", "mysql").replace("mysql+asyncmy", "mysql"))
+    conn = pymysql.connect(
+        host=u.hostname or "127.0.0.1",
+        port=u.port or 3306,
+        user=u.username or "vexor",
+        password=u.password or "",
+        database=(u.path or "/vexor").lstrip("/"),
+        cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=5,
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.fetchone()
+    finally:
+        conn.close()
+
 router = APIRouter(prefix="/api/v1/logs", tags=["logs-shipper"])
 
 INSTALL_SCRIPT_DIR = Path("/opt/vexor/api/plugins/logs/install-scripts")
@@ -134,24 +166,10 @@ def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
 
     # Look up host in hosts table to translate name -> address
     try:
-        import asyncio as _aio
-        from sqlalchemy import text as _text  # type: ignore
-        from app.database import async_session  # type: ignore
-        async def _resolve():
-            async with async_session() as db:
-                r = (await db.execute(
-                    _text("SELECT address, credential_id FROM hosts WHERE name=:n"),
-                    {"n": body.host},
-                )).mappings().first()
-                return dict(r) if r else None
-        try:
-            row = _aio.run(_resolve())
-        except RuntimeError:
-            loop = _aio.new_event_loop()
-            try:
-                row = loop.run_until_complete(_resolve())
-            finally:
-                loop.close()
+        row = _db_query_one(
+            "SELECT address, credential_id FROM hosts WHERE name=%(n)s",
+            {"n": body.host},
+        )
         if row:
             if row.get("address"):
                 target_host = row["address"]
@@ -163,22 +181,11 @@ def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
     # Look up credential username/password/key
     if body.credentials_id:
         try:
-            async def _resolve_cred():
-                async with async_session() as db:
-                    r = (await db.execute(
-                        _text("SELECT username, password_enc, private_key_enc "
-                              "FROM host_credentials WHERE id=:i"),
-                        {"i": body.credentials_id},
-                    )).mappings().first()
-                    return dict(r) if r else None
-            try:
-                cred = _aio.run(_resolve_cred())
-            except RuntimeError:
-                loop = _aio.new_event_loop()
-                try:
-                    cred = loop.run_until_complete(_resolve_cred())
-                finally:
-                    loop.close()
+            cred = _db_query_one(
+                "SELECT username, password_enc, private_key_enc "
+                "FROM host_credentials WHERE id=%(i)s",
+                {"i": body.credentials_id},
+            )
             if cred:
                 if cred.get("username") and not body.username:
                     user = cred["username"]
@@ -188,7 +195,6 @@ def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
                     pk = decrypt(cred.get("private_key_enc")) if cred.get("private_key_enc") else None
                 except Exception:
                     pw, pk = None, None
-                # Fallback to legacy on-disk files
                 if not pw:
                     pp = _pw_path(body.credentials_id)
                     if pp and Path(pp).exists():
@@ -198,7 +204,6 @@ def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
                     if kp and Path(kp).exists():
                         key = kp
                 else:
-                    # write decrypted key to a tempfile
                     import tempfile
                     tf = tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".key")
                     tf.write(pk); tf.close()
