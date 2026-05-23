@@ -111,7 +111,7 @@ def _ssh_run(host: str, port: int, user: str,
              remote_cmd: str = "",
              stdin: Optional[bytes] = None,
              timeout: int = 300) -> tuple[int, str, str]:
-    base = ["-o", "StrictHostKeyChecking=no",
+    base = ["-o", "StrictHostKeyChecking=accept-new", "-o", "UserKnownHostsFile=/var/lib/vexor/known_hosts",
             "-o", "UserKnownHostsFile=/dev/null",
             "-o", "ConnectTimeout=15",
             "-p", str(port)]
@@ -232,25 +232,26 @@ def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
             except Exception: pass
         raise HTTPException(400, "no SSH credential available (need key or password)")
 
+    # ---- key is now on disk; wrap remaining work in try/finally to ensure cleanup
     try:
-        scr = get_script("vector", "linux")["content"]
-    except HTTPException:
-        raise HTTPException(500, "install-linux-agent.sh not packaged")
-    url = body.vexor_url or _public_url()
-    args = [f"--vexor-url {shlex.quote(url)}",
+        try:
+            scr = get_script("vector", "linux")["content"]
+        except HTTPException:
+            raise HTTPException(500, "install-linux-agent.sh not packaged")
+        url = body.vexor_url or _public_url()
+        args = [f"--vexor-url {shlex.quote(url)}",
             f"--token {shlex.quote(body.token)}",
             f"--agent {shlex.quote(body.agent)}"]
-    for l in body.logs:
-        args.append(f"--log {shlex.quote(l)}")
-    # If using password auth user is non-root, prefix sudo with -S to read pw from stdin
-    if password and user != "root":
-        remote = f"sudo -S bash -s -- {" ".join(args)}"
-        stdin_payload = (password + "\n").encode() + scr.encode("utf-8")
-    else:
-        remote = f"sudo bash -s -- {" ".join(args)}" if user != "root" else f"bash -s -- {" ".join(args)}"
-        stdin_payload = scr.encode("utf-8")
+        for l in body.logs:
+            args.append(f"--log {shlex.quote(l)}")
+        # If using password auth user is non-root, prefix sudo with -S to read pw from stdin
+        if password and user != "root":
+            remote = f"sudo -S bash -s -- {" ".join(args)}"
+            stdin_payload = (password + "\n").encode() + scr.encode("utf-8")
+        else:
+            remote = f"sudo bash -s -- {" ".join(args)}" if user != "root" else f"bash -s -- {" ".join(args)}"
+            stdin_payload = scr.encode("utf-8")
 
-    try:
         rc, out, err = _ssh_run(target_host, body.port, user,
                                 key_path=key, password=password,
                                 remote_cmd=remote, stdin=stdin_payload)
