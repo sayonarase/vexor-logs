@@ -48,3 +48,10 @@ On the Vexor server, expose VictoriaLogs (TCP 9428) only to your hosts.
 The default config binds to 127.0.0.1; either change `-httpListenAddr` in
 `/usr/lib/systemd/system/vexor-victorialogs.service` or front it with the
 existing Vexor reverse-proxy.
+
+
+## Detailed agent setup
+
+For per-platform agent installation (Linux + Windows), GUI-driven
+deployment via *Logs › Shippers*, manual install templates and ingest
+verification, see [AGENTS.md](AGENTS.md).
