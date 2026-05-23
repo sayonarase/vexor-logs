@@ -40,14 +40,29 @@ async def _evaluate_once(session_factory) -> None:
         for r in rules:
             try:
                 start = (datetime.now(timezone.utc) - timedelta(seconds=r.window_sec)).isoformat()
+                qlimit = max(r.threshold * 10, 1000)
                 def _do_query():
-                    return _client.query(r.query, limit=max(r.threshold + 1, 5), start=start)
+                    return _client.query(r.query, limit=qlimit, start=start)
                 rows = await asyncio.to_thread(_do_query)
                 count = len(rows)
                 r.last_count = count
                 fired = count >= r.threshold
+                import os as _os
+                COOLDOWN = int(_os.environ.get("VEXOR_LOG_ALERT_COOLDOWN_SEC", "600"))
+                may_dispatch = False
                 if fired:
-                    r.last_fired = datetime.now(timezone.utc)
+                    now = datetime.now(timezone.utc)
+                    lf = r.last_fired
+                    if lf is None:
+                        may_dispatch = True
+                    else:
+                        if lf.tzinfo is None:
+                            lf = lf.replace(tzinfo=timezone.utc)
+                        if (now - lf).total_seconds() >= COOLDOWN:
+                            may_dispatch = True
+                    if may_dispatch:
+                        r.last_fired = now
+                if may_dispatch:
                     await asyncio.to_thread(_dispatch, r, count, rows)
                 # Always update naemon state when a binding exists so the
                 # service moves back to OK when matches drop below threshold.

@@ -97,26 +97,31 @@ async def update_rule(rule_id: int, body: RuleIn,
     r = await db.get(LogAlertRule, rule_id)
     if not r:
         raise HTTPException(status_code=404, detail="not found")
+    # Snapshot current values so we can roll back if naemon rejects the change.
+    snapshot = {c.name: getattr(r, c.name) for c in r.__table__.columns}
     old_host = r.host_binding
     old_slug = slugify_rule_name(r.name)
     for k, v in body.dict().items():
         setattr(r, k, v)
-    await db.commit()
-    await db.refresh(r)
-    # adjust naemon service if binding changed
+    # Adjust naemon service BEFORE commit so we can revert.
     try:
         if old_host and (old_host != r.host_binding or slugify_rule_name(r.name) != old_slug):
             remove_log_service(old_host, old_slug)
         if r.host_binding:
             ensure_log_service(r.host_binding, slugify_rule_name(r.name), r.name)
     except InvalidHostName as e:
+        for k, v in snapshot.items(): setattr(r, k, v)
         raise HTTPException(400, f"invalid host_binding: {e}")
     except UnknownHost as e:
+        for k, v in snapshot.items(): setattr(r, k, v)
         raise HTTPException(400, f"host_binding refers to unknown Naemon host: {e}")
     except NaemonReloadFailed as e:
+        for k, v in snapshot.items(): setattr(r, k, v)
         raise HTTPException(409, f"naemon refused config: {e}")
     except Exception as e:
         log.warning("naemon service sync failed: %s", e)
+    await db.commit()
+    await db.refresh(r)
     return _to_out(r)
 
 

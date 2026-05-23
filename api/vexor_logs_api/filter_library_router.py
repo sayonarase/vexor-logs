@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .models import LogAlertRule, LogSavedSearch
 from .log_alerts_router import RuleOut, _to_out as _alert_to_out
 from .saved_searches_router import SavedOut, _to_out as _saved_to_out
-from .naemon_passive import slugify_rule_name, ensure_log_service
+from .naemon_passive import slugify_rule_name, ensure_log_service, InvalidHostName, UnknownHost, NaemonReloadFailed
 
 try:
     from app.database import get_db  # type: ignore
@@ -119,9 +119,14 @@ async def install(body: InstallIn, db: AsyncSession = Depends(get_db),
         try:
             ensure_log_service(row.host_binding, slugify_rule_name(row.name), row.name)
         except InvalidHostName as e:
-            await db.delete(row)
-            await db.commit()
+            await db.delete(row); await db.commit()
             raise HTTPException(400, f"invalid host_binding: {e}")
+        except UnknownHost as e:
+            await db.delete(row); await db.commit()
+            raise HTTPException(400, f"host_binding refers to unknown Naemon host: {e}")
+        except NaemonReloadFailed as e:
+            await db.delete(row); await db.commit()
+            raise HTTPException(409, f"naemon refused config: {e}")
         except Exception as e:
             log.exception("ensure_log_service failed for rule id=%s host=%s",
                           row.id, row.host_binding)

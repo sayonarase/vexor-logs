@@ -153,7 +153,6 @@ def export(
             gen_nd(), media_type="application/x-ndjson",
             headers={"Content-Disposition": f'attachment; filename="logs_{ts}.ndjson"'},
         )
-    # CSV: collect a stable column union
     cols: list[str] = []
     seen = set()
     for r in rows:
@@ -164,14 +163,18 @@ def export(
         cols.remove("_time"); cols.insert(0, "_time")
     if "_msg" in cols:
         cols.remove("_msg"); cols.append("_msg")
-    buf = io.StringIO()
-    w = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
-    w.writeheader()
-    for r in rows:
-        w.writerow({k: ("" if r.get(k) is None else str(r.get(k))) for k in cols})
-    data = buf.getvalue().encode("utf-8")
+    def gen_csv():
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+        w.writeheader()
+        yield buf.getvalue().encode("utf-8")
+        buf.seek(0); buf.truncate()
+        for r in rows:
+            w.writerow({k: ("" if r.get(k) is None else str(r.get(k))) for k in cols})
+            yield buf.getvalue().encode("utf-8")
+            buf.seek(0); buf.truncate()
     return StreamingResponse(
-        iter([data]), media_type="text/csv",
+        gen_csv(), media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="logs_{ts}.csv"'},
     )
 
