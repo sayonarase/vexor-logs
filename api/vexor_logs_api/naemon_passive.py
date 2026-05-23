@@ -101,17 +101,33 @@ def _read_blocks() -> dict[str, str]:
     return blocks
 
 
+_LOCK_FILE = Path("/var/lock/vexor-logs-services.lock")
+
+
+def _lock():
+    import fcntl
+    _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fp = open(_LOCK_FILE, "w")
+    fcntl.flock(fp.fileno(), fcntl.LOCK_EX)
+    return fp
+
+
 def _write_blocks(blocks: dict[str, str]) -> None:
     LOG_SERVICES_FILE.parent.mkdir(parents=True, exist_ok=True)
     body = "# Managed by vexor-logs — do not edit by hand.\n\n"
     body += "\n".join(blocks[k] for k in sorted(blocks))
-    tmp = LOG_SERVICES_FILE.with_suffix(LOG_SERVICES_FILE.suffix + ".tmp")
-    tmp.write_text(body)
+    lock_fp = _lock()
     try:
-        os.chmod(tmp, 0o644)
-    except Exception:
-        pass
-    os.replace(tmp, LOG_SERVICES_FILE)
+        tmp = LOG_SERVICES_FILE.with_suffix(LOG_SERVICES_FILE.suffix + ".tmp")
+        tmp.write_text(body)
+        try:
+            os.chmod(tmp, 0o644)
+        except Exception:
+            pass
+        os.replace(tmp, LOG_SERVICES_FILE)
+    finally:
+        try: lock_fp.close()
+        except Exception: pass
 
 
 def _reload_naemon() -> tuple[bool, str]:
@@ -152,10 +168,13 @@ def host_exists(host: str) -> bool:
         # Fast path: objects.cache is plain text and lists every parsed host.
         cache = Path("/var/cache/naemon/objects.cache")
         if cache.exists():
-            needle = f"host_name\t{host}"
+            # log-14: exact-line match to avoid substring false positives
+            tab_form = "host_name\t" + host
+            sp_form = "host_name " + host
             with cache.open() as fh:
                 for line in fh:
-                    if needle in line or line.strip() == f"host_name {host}":
+                    stripped = line.rstrip("\n\r").lstrip("\t ")
+                    if stripped == tab_form or stripped == sp_form:
                         return True
         # Fallback for fresh installs: scan /etc/naemon/vexor/hosts/
         hosts_dir = Path("/etc/naemon/vexor/hosts")
@@ -191,6 +210,19 @@ def ensure_log_service(host: str, rule_slug: str, rule_name: str) -> None:
     existing = blocks.get(key)
     if existing == block:
         return
+    # log-15: detect slug collision with a different rule_name in the same host.
+    # If existing stanza references a different display name, append numeric suffix.
+    if existing and ("name " + rule_name) not in existing:
+        base = rule_slug
+        n = 2
+        while _key(host, base + "_" + str(n)) in blocks:
+            n += 1
+        rule_slug = base + "_" + str(n)
+        key = _key(host, rule_slug)
+        svc = service_name(rule_slug)
+        block = _SVC_TEMPLATE.format(begin=_BEGIN, end=_END, key=key,
+                                     host=host, svc=svc, name=rule_name)
+        existing = blocks.get(key)
     blocks[key] = block
     _write_blocks(blocks)
     ok, err = _reload_naemon()
