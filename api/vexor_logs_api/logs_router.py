@@ -1,5 +1,6 @@
 """Read-side router: query, tail, stream discovery, histogram, export, test."""
 from __future__ import annotations
+import re
 import csv
 import io
 import json
@@ -18,6 +19,13 @@ except Exception:
     def require_viewer():  # type: ignore
         return None
 
+
+_SAFE_FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]{0,63}$")
+def _safe_field(name: str) -> str:
+    if not isinstance(name, str) or not _SAFE_FIELD_RE.match(name):
+        from fastapi import HTTPException
+        raise HTTPException(400, f"invalid field name: {name!r}")
+    return name
 
 router = APIRouter(prefix="/api/v1/logs", tags=["logs"])
 
@@ -206,6 +214,7 @@ def _safe_query(q: str) -> str:
 
 
 def _topn(query: str, field: str, limit: int, start_dt, end_dt) -> list[dict]:
+    field = _safe_field(field)
     pipe = f'{_safe_query(query)} | stats by ({field}) count() as c | sort by (c) desc | limit {int(limit)}'
     rows = _client.query(pipe, limit=limit + 5,
                          start=start_dt.isoformat(), end=end_dt.isoformat())

@@ -25,6 +25,11 @@ except Exception:
     def require_admin(): return None  # type: ignore
 
 try:
+    from app.services.auth import require_viewer  # type: ignore
+except Exception:
+    def require_viewer(): return None  # type: ignore
+
+try:
     from app.routers.credentials_router import _key_path, _pw_path  # type: ignore
 except Exception:
     def _key_path(cid): return None  # type: ignore
@@ -81,7 +86,7 @@ class DeployIn(BaseModel):
     logs: list[str] = Field(default_factory=lambda: ["/var/log"])
 
 
-@router.get("/deploy-shipper/script")
+@router.get("/deploy-shipper/script", dependencies=[Depends(require_viewer)])
 def get_script(agent: str = "vector", target: str = "linux") -> dict:
     """Return the install script contents so the UI can show / download it."""
     if target == "windows":
@@ -272,7 +277,7 @@ _ALLOWED_SCRIPTS = {
     "install-windows-agent-interactive.ps1": ("text/x-powershell","windows"),
 }
 
-@router.get("/install-scripts")
+@router.get("/install-scripts", dependencies=[Depends(require_viewer)])
 def list_install_scripts() -> dict:
     out = []
     for name, (ctype, os_) in _ALLOWED_SCRIPTS.items():
@@ -286,7 +291,7 @@ def list_install_scripts() -> dict:
         })
     return {"scripts": out}
 
-@router.get("/install-scripts/{name}")
+@router.get("/install-scripts/{name}", dependencies=[Depends(require_viewer)])
 def serve_install_script(name: str):
     meta = _ALLOWED_SCRIPTS.get(name)
     if not meta:

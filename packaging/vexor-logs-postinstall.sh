@@ -24,7 +24,7 @@ DB=$(  echo "$URL" | sed -E "s|.*/([^?]+).*|\1|")
 for f in "$MIG_DIR"/*.sql; do
   [ -f "$f" ] || continue
   echo "vexor-logs: applying $(basename "$f")"
-  if ! mysql -u"$USER" -p"$PASS" -h"$HOST" "$DB" < "$f" 2>&1; then
+  if ! MYSQL_PWD="$PASS" mysql -u"$USER" -h"$HOST" "$DB" < "$f" 2>&1; then
     echo "vexor-logs: WARNING migration $(basename "$f") returned non-zero - continuing"
   fi
 done

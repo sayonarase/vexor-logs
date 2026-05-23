@@ -105,11 +105,13 @@ def _write_blocks(blocks: dict[str, str]) -> None:
     LOG_SERVICES_FILE.parent.mkdir(parents=True, exist_ok=True)
     body = "# Managed by vexor-logs — do not edit by hand.\n\n"
     body += "\n".join(blocks[k] for k in sorted(blocks))
-    LOG_SERVICES_FILE.write_text(body)
+    tmp = LOG_SERVICES_FILE.with_suffix(LOG_SERVICES_FILE.suffix + ".tmp")
+    tmp.write_text(body)
     try:
-        os.chmod(LOG_SERVICES_FILE, 0o644)
+        os.chmod(tmp, 0o644)
     except Exception:
         pass
+    os.replace(tmp, LOG_SERVICES_FILE)
 
 
 def _reload_naemon() -> tuple[bool, str]:

@@ -40,13 +40,15 @@ async def _evaluate_once(session_factory) -> None:
         for r in rules:
             try:
                 start = (datetime.now(timezone.utc) - timedelta(seconds=r.window_sec)).isoformat()
-                rows = _client.query(r.query, limit=max(r.threshold + 1, 5), start=start)
+                def _do_query():
+                    return _client.query(r.query, limit=max(r.threshold + 1, 5), start=start)
+                rows = await asyncio.to_thread(_do_query)
                 count = len(rows)
                 r.last_count = count
                 fired = count >= r.threshold
                 if fired:
                     r.last_fired = datetime.now(timezone.utc)
-                    _dispatch(r, count, rows)
+                    await asyncio.to_thread(_dispatch, r, count, rows)
                 # Always update naemon state when a binding exists so the
                 # service moves back to OK when matches drop below threshold.
                 host = getattr(r, "host_binding", None)
