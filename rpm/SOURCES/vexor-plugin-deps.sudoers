@@ -1,0 +1,2 @@
+# Allow vexor user to install Perl plugin dependencies via the strict wrapper only.
+vexor ALL=(root) NOPASSWD: /usr/local/sbin/vexor-cpanm-install
