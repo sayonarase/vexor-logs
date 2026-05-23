@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -56,14 +56,25 @@ def list_streams(_=Depends(require_viewer)) -> dict:
 
 
 @router.get("/tail")
-def tail(query: str = Query(...), _=Depends(require_viewer)) -> StreamingResponse:
-    def gen():
+async def tail(request: Request, query: str = Query(...), _=Depends(require_viewer)) -> StreamingResponse:
+    async def gen():
+        import asyncio as _asyncio
         try:
-            for chunk in _client.stream(query):
+            it = iter(_client.stream(query))
+            while True:
+                # cooperative disconnect check before each fetch
+                if await request.is_disconnected():
+                    break
+                try:
+                    chunk = await _asyncio.to_thread(next, it)
+                except StopIteration:
+                    break
                 for line in chunk.splitlines():
                     line = line.strip()
                     if not line:
                         continue
+                    if await request.is_disconnected():
+                        return
                     yield f"data: {line.decode('utf-8', 'replace') if isinstance(line, bytes) else line}\n\n"
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
@@ -196,14 +207,28 @@ def test_query(body: TestQueryIn, _=Depends(require_viewer)) -> dict:
         sample = _client.query(body.query, limit=3, start=start)
     except Exception as e:
         return {"matched_count": 0, "sample": [], "parse_ok": False, "error": str(e)}
-    # second call with bigger limit just to count
+    # True total via stats pipe (not capped). Falls back to len(sample) on failure.
+    matched: int = len(sample)
+    matched_capped = False
     try:
-        more = _client.query(body.query, limit=1000, start=start)
-        matched = len(more)
+        from .logsql import safe_pipe  # type: ignore
     except Exception:
-        matched = len(sample)
-        parse_ok = False
-    return {"matched_count": matched, "sample": sample[:3], "parse_ok": parse_ok}
+        safe_pipe = None  # noqa: N806
+    try:
+        agg = _client.query(f"({body.query}) | stats count() as c", limit=1, start=start)
+        if agg and isinstance(agg[0], dict):
+            matched = int(agg[0].get("c") or agg[0].get("count") or matched)
+    except Exception:
+        # Fall back to len(query result) — but mark capped if we hit the limit.
+        try:
+            more = _client.query(body.query, limit=10000, start=start)
+            matched = len(more)
+            matched_capped = matched >= 10000
+        except Exception:
+            matched = len(sample)
+            parse_ok = False
+    return {"matched_count": matched, "matched_capped": matched_capped,
+            "sample": sample[:3], "parse_ok": parse_ok}
 
 # ---------------------------------------------------------------------------
 # Dashboard helpers: top-N field values and summary KPIs
@@ -316,16 +341,18 @@ def histogram_by(
     q = _safe_query(query)
     try:
         top_vals = [r["value"] for r in _topn(q, field, top, start_dt, end_dt)]
-        series: list[dict] = []
-        for v in top_vals:
+        def _fetch(v):
             sub = f'({q}) AND {field}:{json.dumps(v)}'
             data = _client.hits(sub, start=start_dt.isoformat(),
                                 end=end_dt.isoformat(), step=step)
             arr = (data.get("hits") or data.get("series") or [{}])[0] if isinstance(data, dict) else {}
             ts = arr.get("timestamps") or arr.get("t") or []
             vs = arr.get("values") or arr.get("v") or []
-            series.append({"value": v,
-                           "buckets": [{"t": t, "count": int(c or 0)} for t, c in zip(ts, vs)]})
+            return {"value": v,
+                    "buckets": [{"t": t, "count": int(c or 0)} for t, c in zip(ts, vs)]}
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(8, max(1, len(top_vals)))) as ex:
+            series = list(ex.map(_fetch, top_vals))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
     return {"field": field, "step": step, "series": series,

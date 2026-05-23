@@ -183,17 +183,19 @@ def _oldest_log_ts() -> Optional[str]:
 
 
 @router.get("/storage")
-def storage(_=Depends(require_viewer)) -> dict:
+async def storage(_=Depends(require_viewer)) -> dict:
+    import asyncio as _asyncio
     settings = _current_settings()
-    metrics = _client.metrics_text()
+    metrics = await _asyncio.to_thread(_client.metrics_text)
     metric_used = _parse_metric(metrics, "vlstorage_data_size_bytes")
-    used_disk, free = _stat_storage()
+    used_disk, free = await _asyncio.to_thread(_stat_storage)
+    oldest = await _asyncio.to_thread(_oldest_log_ts)
     used = int(metric_used) if metric_used is not None else used_disk
     return {
         "used_bytes": used,
         "used_bytes_disk": used_disk,
         "free_bytes": free,
-        "oldest_log_ts": _oldest_log_ts(),
+        "oldest_log_ts": oldest,
         "retention_days": settings.retention_days,
         "storage_path": str(STORAGE_DIR),
         "partitions": [{"path": str(STORAGE_DIR), "used_bytes": used_disk, "free_bytes": free}],
