@@ -5,8 +5,8 @@ AutoReq: no
 AutoProv: no
 
 Name:           vexor-vector
-Version:        0.55.0
-Release:        3%{?dist}
+Version:        0.56.0
+Release:        1%{?dist}
 Summary:        Vector agent packaged with Vexor Logs defaults
 License:        MPL-2.0
 URL:            https://vector.dev/
@@ -57,5 +57,7 @@ fi
 /usr/lib/systemd/system/vexor-vector.service
 
 %changelog
+* Tue Nov 18 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.56.0-1
+- Update bundled Vector to 0.56.0.
 * Mon Nov 17 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.55.0-1
 - Initial Vector wrapper for Vexor Logs.
