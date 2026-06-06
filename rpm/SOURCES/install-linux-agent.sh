@@ -176,10 +176,46 @@ EOF
 
 case "$AGENT" in
   vector)
+    # If this host already runs the built-in Vexor shipper (vexor-vector,
+    # present on Vexor server nodes), its logs are already collected — do not
+    # install a conflicting second shipper.
+    if systemctl list-unit-files 2>/dev/null | grep -q '^vexor-vector\.service'; then
+      echo "This host already runs vexor-vector; its logs are already shipped to Vexor."
+      sudo systemctl enable --now vexor-vector >/dev/null 2>&1 || true
+      echo "OK: nothing to do (vexor-vector already active)."
+      exit 0
+    fi
     install_vector
     write_vector_config
-    sudo systemctl enable --now vector
-    sudo systemctl restart vector
+    sudo mkdir -p /var/lib/vector
+    # Ship a dedicated unit that runs vector as root with OUR config, so we do
+    # not depend on the upstream package's unit name (which may be absent, or
+    # run as the 'vector' user with the demo config and never read our
+    # /etc/vector/vector.toml).
+    VECTOR_BIN="$(command -v vector || echo /usr/bin/vector)"
+    sudo tee /etc/systemd/system/vexor-log-agent.service >/dev/null <<EOF
+[Unit]
+Description=Vexor Log Agent (vector)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=root
+Group=root
+ExecStartPre=${VECTOR_BIN} validate --config-toml /etc/vector/vector.toml
+ExecStart=${VECTOR_BIN} --config-toml /etc/vector/vector.toml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    # Stop any upstream vector.service so the two don't double-ship.
+    sudo systemctl disable --now vector >/dev/null 2>&1 || true
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now vexor-log-agent
+    sudo systemctl restart vexor-log-agent
+    AGENT=vexor-log-agent
     ;;
   fluentbit|fluent-bit)
     install_fluentbit

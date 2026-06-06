@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        8%{?dist}
+Release:        9%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -128,6 +128,8 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jun 06 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-9
+- install-linux-agent.sh (vector): detect built-in vexor-vector and skip (logs already shipped); otherwise ship a dedicated vexor-log-agent.service running vector as root with our /etc/vector/vector.toml instead of blindly enabling a non-existent vector.service (fixes 'Unit vector.service does not exist' on Vexor nodes)
 * Fri May 22 2026 Copilot <copilot@vexor> - 0.1.0-7
 - Ship polkit rule (91-vexor-victorialogs.rules) so vexor user can restart
   victorialogs without sudo (sudo blocked by NoNewPrivileges hardening).

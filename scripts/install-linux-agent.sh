@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# install-linux-agent.sh — Vexor Logs shipper installer.
+# install-linux-agent.sh — install a Vexor Logs shipper (vector or fluent-bit).
+# Re-runnable: idempotent installs and config rewrites only.
 #
 # Usage:
-#   install-linux-agent.sh --vexor-url URL [--token TOKEN] [--agent vector|fluentbit]
-#                          [--log /path]...
+#   install-linux-agent.sh --vexor-url https://vexor.example.com \
+#                          --token <bootstrap-token> \
+#                          [--agent vector|fluentbit] \
+#                          [--log /var/log/foo] [--log /var/log/bar]
 #
-# Verbose tracing: VERBOSE=1 install-linux-agent.sh ...
-
+# When omitted, --log defaults to /var/log (recursive).
 set -euo pipefail
 
-VECTOR_VERSION="${VECTOR_VERSION:-0.44.0}"
 AGENT="vector"
 TOKEN=""
 URL=""
@@ -21,142 +22,93 @@ while [[ $# -gt 0 ]]; do
     --token)     TOKEN="$2"; shift 2 ;;
     --agent)     AGENT="$2"; shift 2 ;;
     --log|--logs) LOGS+=("$2"); shift 2 ;;
-    --help|-h)   sed -n "2,8p" "$0"; exit 0 ;;
-    *) echo "ERROR: unknown arg: $1" >&2; exit 2 ;;
+    --help|-h)   sed -n "2,12p" "$0"; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
 
-[[ -z "$URL" ]] && { echo "ERROR: --vexor-url is required" >&2; exit 2; }
-[[ ${#LOGS[@]} -eq 0 ]] && LOGS=("/var/log")
+if [[ -z "$URL" ]]; then
+  echo "ERROR: --vexor-url is required" >&2; exit 2
+fi
+if [[ ${#LOGS[@]} -eq 0 ]]; then
+  LOGS=("/var/log")
+fi
 
-if [[ ${EUID:-$(id -u)} -eq 0 ]]; then SUDO=""; else SUDO="sudo"; fi
-[[ "${VERBOSE:-0}" == "1" ]] && set -x
-
-log()   { printf '\e[36m>>> %s\e[0m\n' "$*"; }
-ok()    { printf '\e[32m[OK]\e[0m %s\n' "$*"; }
-warn()  { printf '\e[33m[WARN]\e[0m %s\n' "$*" >&2; }
-fail()  { printf '\e[31m[FAIL]\e[0m %s\n' "$*" >&2; }
-
-on_err() {
-  local rc=$?
-  local line=$1
-  fail "step failed (rc=$rc) at line $line: ${BASH_COMMAND:-?}"
-  exit "$rc"
-}
-trap 'on_err $LINENO' ERR
-
+# Extract host:port for the VictoriaLogs JSON push endpoint.
+# We assume the Vexor reverse-proxy forwards /api/v1/logs/push -> VictoriaLogs.
 VEXOR_HOST="$(echo "$URL" | sed -E 's#^https?://##; s#/.*##')"
-HOST_NAME="$(hostname)"
-HOST_ADDR="$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')"
-[[ -z "$HOST_ADDR" ]] && HOST_ADDR="$(hostname -I 2>/dev/null | awk '{print $1}')"
-[[ -z "$HOST_ADDR" ]] && HOST_ADDR="unknown"
-
-log "Installing $AGENT on $HOST_NAME -> $URL"
-log "  log paths: ${LOGS[*]}"
-log "  agent ver: $VECTOR_VERSION"
+echo "+ Installing $AGENT on $(hostname) shipping to $URL"
 
 # ---- Detect package manager ------------------------------------------------
 PKG=""
 if   command -v dnf >/dev/null 2>&1; then PKG=dnf
 elif command -v yum >/dev/null 2>&1; then PKG=yum
-elif command -v apt-get >/dev/null 2>&1; then PKG=apt-get
+elif command -v apt-get >/dev/null 2>&1; then PKG=apt
 fi
-log "Package manager: ${PKG:-<none detected>}"
-
-ARCH="$(uname -m)"
-case "$ARCH" in
-  x86_64|amd64) PKG_ARCH=x86_64 ;;
-  aarch64|arm64) PKG_ARCH=aarch64 ;;
-  *) fail "unsupported arch: $ARCH"; exit 3 ;;
-esac
-
-install_vector_direct_rpm() {
-  local url="https://packages.timber.io/vector/${VECTOR_VERSION}/vector-${VECTOR_VERSION}-1.${PKG_ARCH}.rpm"
-  log "Installing vector $VECTOR_VERSION from direct RPM:"
-  log "  $url"
-  if ! $SUDO ${PKG} install -y "$url" 2>&1 | sed 's/^/    /'; then
-    warn "package manager install failed, falling back to rpm -Uvh"
-    local tmp; tmp="$(mktemp --suffix=.rpm)"
-    curl -fSL --progress-bar -o "$tmp" "$url"
-    $SUDO rpm -Uvh --force "$tmp" | sed 's/^/    /'
-    rm -f "$tmp"
-  fi
-}
-
-install_vector_direct_deb() {
-  local arch=amd64; [[ "$PKG_ARCH" == "aarch64" ]] && arch=arm64
-  local url="https://packages.timber.io/vector/${VECTOR_VERSION}/vector_${VECTOR_VERSION}-1_${arch}.deb"
-  local tmp; tmp="$(mktemp --suffix=.deb)"
-  log "Installing vector $VECTOR_VERSION from direct .deb"
-  log "  $url"
-  curl -fSL --progress-bar -o "$tmp" "$url"
-  $SUDO apt-get install -y "$tmp" | sed 's/^/    /'
-  rm -f "$tmp"
-}
 
 install_vector() {
   if command -v vector >/dev/null 2>&1; then
-    ok "vector already installed: $(vector --version | head -1)"; return
+    echo "vector already installed: $(vector --version | head -1)"
+    return
   fi
   case "$PKG" in
-    dnf|yum) install_vector_direct_rpm ;;
-    apt-get) install_vector_direct_deb ;;
-    *) fail "no supported package manager"; exit 3 ;;
+    dnf|yum)
+      curl -1sLf 'https://repositories.timber.io/public/vector/cfg/setup/bash.rpm.sh' | sudo bash
+      sudo $PKG install -y vector
+      ;;
+    apt)
+      curl -1sLf 'https://repositories.timber.io/public/vector/cfg/setup/bash.deb.sh' | sudo bash
+      sudo apt-get install -y vector
+      ;;
+    *)
+      echo "no supported package manager — download vector manually from https://vector.dev" >&2
+      exit 3
+      ;;
   esac
-  if command -v vector >/dev/null 2>&1; then
-    ok "vector installed: $(vector --version | head -1)"
-  else
-    fail "vector binary missing after install"
-    exit 4
-  fi
 }
 
 install_fluentbit() {
   if command -v fluent-bit >/dev/null 2>&1; then
-    ok "fluent-bit already installed"; return
+    echo "fluent-bit already installed: $(fluent-bit --version | head -1)"
+    return
   fi
   case "$PKG" in
     dnf|yum)
-      $SUDO tee /etc/yum.repos.d/fluent-bit.repo >/dev/null <<EOF
+      curl -fsSL https://packages.fluentbit.io/fluentbit.key | sudo tee /etc/pki/rpm-gpg/fluentbit.key >/dev/null
+      sudo tee /etc/yum.repos.d/fluent-bit.repo >/dev/null <<EOF
 [fluent-bit]
 name=Fluent Bit
 baseurl=https://packages.fluentbit.io/centos/\$releasever/\$basearch
-gpgcheck=0
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/fluentbit.key
 enabled=1
 EOF
-      $SUDO $PKG install -y fluent-bit | sed 's/^/    /'
+      sudo $PKG install -y fluent-bit
       ;;
-    apt-get)
-      curl -fsSL https://packages.fluentbit.io/fluentbit.key | $SUDO gpg --dearmor -o /usr/share/keyrings/fluentbit.gpg
-      echo "deb [signed-by=/usr/share/keyrings/fluentbit.gpg] https://packages.fluentbit.io/ubuntu/$(. /etc/os-release && echo $UBUNTU_CODENAME) main" | $SUDO tee /etc/apt/sources.list.d/fluent-bit.list
-      $SUDO apt-get update && $SUDO apt-get install -y fluent-bit | sed 's/^/    /'
+    apt)
+      curl -fsSL https://packages.fluentbit.io/fluentbit.key | sudo gpg --dearmor -o /usr/share/keyrings/fluentbit.gpg
+      echo "deb [signed-by=/usr/share/keyrings/fluentbit.gpg] https://packages.fluentbit.io/ubuntu/$(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/fluent-bit.list
+      sudo apt-get update && sudo apt-get install -y fluent-bit
       ;;
-    *) fail "no supported package manager"; exit 3 ;;
+    *) echo "no supported package manager" >&2; exit 3 ;;
   esac
 }
 
 write_vector_config() {
-  log "Writing /etc/vector/vector.toml"
-  $SUDO install -d -m 0755 /etc/vexor /etc/vector /var/lib/vector
-  # Disable the default demo config so vector loads our vector.toml
-  if [[ -f /etc/vector/vector.yaml ]]; then
-    $SUDO mv /etc/vector/vector.yaml /etc/vector/vector.yaml.disabled
-    log "  (renamed default vector.yaml -> vector.yaml.disabled)"
-  fi
+  sudo install -d -m 0755 /etc/vexor /etc/vector
+  # Build source/file paths
   local include_lines=""
   for l in "${LOGS[@]}"; do
-    include_lines+="\"$l/**/*.log\","
-    [[ -f "$l" ]] && include_lines+="\"$l\","
+    include_lines="$include_lines\"$l/**/*.log\","
+    [[ -f "$l" ]] && include_lines="$include_lines\"$l\","
   done
   include_lines="${include_lines%,}"
-  $SUDO tee /etc/vexor/logs.env >/dev/null <<EOF
+  sudo tee /etc/vexor/logs.env >/dev/null <<EOF
 VEXOR_LOGS_URL=${URL}
 VEXOR_LOGS_TOKEN=${TOKEN}
 EOF
-  $SUDO chmod 0600 /etc/vexor/logs.env
-  $SUDO chown root:root /etc/vexor/logs.env
-  $SUDO tee /etc/vector/vector.toml >/dev/null <<EOF
-# Generated by vexor install-linux-agent.sh on $(date -Is)
+  sudo tee /etc/vector/vector.toml >/dev/null <<EOF
+# Generated by vexor install-linux-agent.sh
 data_dir = "/var/lib/vector"
 
 [sources.files]
@@ -172,34 +124,30 @@ current_boot_only = true
 type    = "remap"
 inputs  = ["files", "journald"]
 source  = '''
-.host = "${HOST_NAME}"
-.address = "${HOST_ADDR}"
+.host = get_hostname!()
 '''
 
 [sinks.vexor]
 type    = "http"
 inputs  = ["add_host"]
-uri     = "${URL}/api/v1/logs/push?_stream_fields=host,address,file&_msg_field=message&_time_field=timestamp"
+uri     = "${URL}/api/v1/logs/push?_stream_fields=host,file"
 encoding.codec = "json"
 framing.method = "newline_delimited"
 compression = "gzip"
 healthcheck.enabled = false
-$( [[ -n "$TOKEN" ]] && printf 'request.headers.Authorization = "Bearer %s"\n' "$TOKEN" )
-
-[sinks.vexor.tls]
-verify_certificate = false
 EOF
-  $SUDO chmod 0600 /etc/vector/vector.toml
-  $SUDO chown root:root /etc/vector/vector.toml
-  ok "config written"
+  if [[ -n "$TOKEN" ]]; then
+    sudo tee -a /etc/vector/vector.toml >/dev/null <<EOF
+request.headers.Authorization = "Bearer ${TOKEN}"
+EOF
+  fi
 }
 
 write_fluentbit_config() {
-  log "Writing /etc/fluent-bit/fluent-bit.conf"
-  $SUDO install -d -m 0755 /etc/vexor /etc/fluent-bit
+  sudo install -d -m 0755 /etc/vexor /etc/fluent-bit
   local inputs=""
   for l in "${LOGS[@]}"; do
-    inputs+="
+    inputs="${inputs}
 [INPUT]
     Name        tail
     Path        ${l}/*.log
@@ -207,67 +155,75 @@ write_fluentbit_config() {
     Refresh_Interval 5
 "
   done
-  $SUDO tee /etc/fluent-bit/fluent-bit.conf >/dev/null <<EOF
+  sudo tee /etc/fluent-bit/fluent-bit.conf >/dev/null <<EOF
 [SERVICE]
     Flush       5
     Log_Level   info
+    Parsers_File parsers.conf
 ${inputs}
 [OUTPUT]
     Name        http
     Match       *
     Host        ${VEXOR_HOST%:*}
-    Port        $(echo "${VEXOR_HOST##*:}" | grep -Eo '^[0-9]+$' || echo 443)
+    Port        $(echo "${VEXOR_HOST##*:}" | grep -E '^[0-9]+\$' || echo 443)
     URI         /api/v1/logs/push
     Format      json_lines
     tls         on
     tls.verify  off
-$( [[ -n "$TOKEN" ]] && echo "    Header      Authorization Bearer ${TOKEN}" )
+    $( [[ -n "$TOKEN" ]] && echo "Header      Authorization Bearer ${TOKEN}" )
 EOF
-  $SUDO chmod 0600 /etc/fluent-bit/fluent-bit.conf
-  $SUDO chown root:root /etc/fluent-bit/fluent-bit.conf
-  ok "fluent-bit config written"
 }
 
-log "Step 1/4 - install agent"
 case "$AGENT" in
-  vector)              install_vector ;;
-  fluentbit|fluent-bit) install_fluentbit; AGENT=fluent-bit ;;
-  *) fail "unknown agent: $AGENT"; exit 2 ;;
-esac
+  vector)
+    # If this host already runs the built-in Vexor shipper (vexor-vector,
+    # present on Vexor server nodes), its logs are already collected — do not
+    # install a conflicting second shipper.
+    if systemctl list-unit-files 2>/dev/null | grep -q '^vexor-vector\.service'; then
+      echo "This host already runs vexor-vector; its logs are already shipped to Vexor."
+      sudo systemctl enable --now vexor-vector >/dev/null 2>&1 || true
+      echo "OK: nothing to do (vexor-vector already active)."
+      exit 0
+    fi
+    install_vector
+    write_vector_config
+    sudo mkdir -p /var/lib/vector
+    # Ship a dedicated unit that runs vector as root with OUR config, so we do
+    # not depend on the upstream package's unit name (which may be absent, or
+    # run as the 'vector' user with the demo config and never read our
+    # /etc/vector/vector.toml).
+    VECTOR_BIN="$(command -v vector || echo /usr/bin/vector)"
+    sudo tee /etc/systemd/system/vexor-log-agent.service >/dev/null <<EOF
+[Unit]
+Description=Vexor Log Agent (vector)
+After=network-online.target
+Wants=network-online.target
 
-log "Step 2/4 - write configuration"
-case "$AGENT" in
-  vector)     write_vector_config ;;
-  fluent-bit) write_fluentbit_config ;;
-esac
-
-log "Step 3/4 - enable + start service"
-# Run vector as root so it can read /var/log/* and journald
-$SUDO install -d -m 0755 /etc/systemd/system/vector.service.d
-$SUDO tee /etc/systemd/system/vector.service.d/vexor.conf >/dev/null <<EOF
 [Service]
 User=root
 Group=root
-ExecStartPre=
-ExecStartPre=/usr/bin/vector validate --config-toml /etc/vector/vector.toml
-ExecStart=
-ExecStart=/usr/bin/vector --config-toml /etc/vector/vector.toml
+ExecStartPre=${VECTOR_BIN} validate --config-toml /etc/vector/vector.toml
+ExecStart=${VECTOR_BIN} --config-toml /etc/vector/vector.toml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
 EOF
-$SUDO systemctl daemon-reload
-$SUDO systemctl enable --now "$AGENT" 2>&1 | sed 's/^/    /'
-$SUDO systemctl restart "$AGENT"
-sleep 2
+    # Stop any upstream vector.service so the two don't double-ship.
+    sudo systemctl disable --now vector >/dev/null 2>&1 || true
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now vexor-log-agent
+    sudo systemctl restart vexor-log-agent
+    AGENT=vexor-log-agent
+    ;;
+  fluentbit|fluent-bit)
+    install_fluentbit
+    write_fluentbit_config
+    sudo systemctl enable --now fluent-bit
+    sudo systemctl restart fluent-bit
+    ;;
+  *) echo "unknown agent: $AGENT" >&2; exit 2 ;;
+esac
 
-log "Step 4/4 - verify"
-if $SUDO systemctl is-active --quiet "$AGENT"; then
-  ok "$AGENT is active"
-  $SUDO systemctl status "$AGENT" --no-pager -n 5 | sed 's/^/    /'
-else
-  fail "$AGENT failed to start"
-  $SUDO journalctl -u "$AGENT" -n 30 --no-pager | sed 's/^/    /'
-  exit 5
-fi
-
-ok "Done. Logs from $HOST_NAME are now being shipped to $URL"
-echo "    Inspect locally: journalctl -u $AGENT -f"
-echo "    Inspect in GUI:  $URL/logs?host=$HOST_NAME"
+echo "OK: $AGENT installed and started. Inspect logs with: journalctl -u $AGENT -n50"
