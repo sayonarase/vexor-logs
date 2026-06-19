@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        9%{?dist}
+Release:        10%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -128,6 +128,12 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-10
+- evaluator: only submit a passive PROCESS_SERVICE_CHECK_RESULT when the rule's
+  host_binding is a valid, known Naemon host. A stale/garbage binding (e.g. a
+  deleted host, or a rule inserted out-of-band) previously made naemon reject
+  the external command every poll cycle, spamming naemon.log. Mirrors the
+  write-time validation already done in naemon_passive (defence in depth).
 * Sat Jun 06 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-9
 - install-linux-agent.sh (vector): detect built-in vexor-vector and skip (logs already shipped); otherwise ship a dedicated vexor-log-agent.service running vector as root with our /etc/vector/vector.toml instead of blindly enabling a non-existent vector.service (fixes 'Unit vector.service does not exist' on Vexor nodes)
 * Fri May 22 2026 Copilot <copilot@vexor> - 0.1.0-7

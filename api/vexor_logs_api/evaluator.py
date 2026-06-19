@@ -20,7 +20,10 @@ from sqlalchemy import select
 
 from . import _client
 from .models import LogAlertRule
-from .naemon_passive import slugify_rule_name, service_name, submit_passive_result
+from .naemon_passive import (
+    slugify_rule_name, service_name, submit_passive_result,
+    host_exists, _validate_host_name, InvalidHostName,
+)
 
 log = logging.getLogger("vexor.logs.evaluator")
 
@@ -68,15 +71,30 @@ async def _evaluate_once(session_factory) -> None:
                 # service moves back to OK when matches drop below threshold.
                 host = getattr(r, "host_binding", None)
                 if host:
-                    svc = service_name(slugify_rule_name(r.name))
-                    if fired:
-                        rc = _SEV_TO_RC.get((r.severity or "warning").lower(), 1)
-                        output = (f"{r.severity.upper()}: {count} matches in last "
-                                  f"{r.window_sec}s (threshold {r.threshold})")
+                    # Only submit a passive result for a valid, known Naemon
+                    # host. A stale/garbage host_binding (e.g. a host that was
+                    # deleted, or one inserted out-of-band) would otherwise make
+                    # naemon reject the external command every cycle and spam
+                    # naemon.log (log-16).
+                    try:
+                        valid_host = _validate_host_name(host)
+                        known = host_exists(valid_host)
+                    except InvalidHostName:
+                        valid_host, known = None, False
+                    if not known:
+                        log.debug("log rule %r: host_binding %r is not a known "
+                                  "Naemon host; skipping passive result",
+                                  r.name, host)
                     else:
-                        rc = 0
-                        output = f"OK: {count} matches in last {r.window_sec}s"
-                    submit_passive_result(host, svc, rc, output)
+                        svc = service_name(slugify_rule_name(r.name))
+                        if fired:
+                            rc = _SEV_TO_RC.get((r.severity or "warning").lower(), 1)
+                            output = (f"{r.severity.upper()}: {count} matches in last "
+                                      f"{r.window_sec}s (threshold {r.threshold})")
+                        else:
+                            rc = 0
+                            output = f"OK: {count} matches in last {r.window_sec}s"
+                        submit_passive_result(valid_host, svc, rc, output)
                 await db.commit()
             except Exception as e:
                 log.exception("rule %s failed: %s", r.name, e)
