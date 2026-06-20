@@ -267,7 +267,8 @@ async def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
         url = body.vexor_url or _public_url()
         args = [f"--vexor-url {shlex.quote(url)}",
             f"--token {shlex.quote(body.token)}",
-            f"--agent {shlex.quote(body.agent)}"]
+            f"--agent {shlex.quote(body.agent)}",
+            f"--host-name {shlex.quote(body.host)}"]
         for l in body.logs:
             args.append(f"--log {shlex.quote(l)}")
         # If using password auth user is non-root, prefix sudo with -S to read pw from stdin

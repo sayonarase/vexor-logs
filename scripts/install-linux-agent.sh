@@ -14,6 +14,7 @@ set -euo pipefail
 AGENT="vector"
 TOKEN=""
 URL=""
+HOST_NAME=""
 LOGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -22,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --token)     TOKEN="$2"; shift 2 ;;
     --agent)     AGENT="$2"; shift 2 ;;
     --log|--logs) LOGS+=("$2"); shift 2 ;;
+    --host-name) HOST_NAME="$2"; shift 2 ;;
     --help|-h)   sed -n "2,12p" "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -33,6 +35,11 @@ fi
 if [[ ${#LOGS[@]} -eq 0 ]]; then
   LOGS=("/var/log")
 fi
+
+# Host label used in VictoriaLogs. Prefer the Vexor host name passed by
+# the deploy (so logs match the host as Vexor knows it); fall back to the
+# box's own hostname. Baked at install time.
+EFFECTIVE_HOST="${HOST_NAME:-$(hostname)}"
 
 # Extract host:port for the VictoriaLogs JSON push endpoint.
 # We assume the Vexor reverse-proxy forwards /api/v1/logs/push -> VictoriaLogs.
@@ -124,7 +131,7 @@ current_boot_only = true
 type    = "remap"
 inputs  = ["files", "journald"]
 source  = '''
-.host = get_hostname!()
+.host = "${EFFECTIVE_HOST}"
 '''
 
 [sinks.vexor]
@@ -161,6 +168,11 @@ write_fluentbit_config() {
     Log_Level   info
     Parsers_File parsers.conf
 ${inputs}
+[FILTER]
+    Name        record_modifier
+    Match       *
+    Record      host ${EFFECTIVE_HOST}
+
 [OUTPUT]
     Name        http
     Match       *

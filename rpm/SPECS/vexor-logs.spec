@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        12%{?dist}
+Release:        13%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -157,6 +157,12 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-13
+- Deployed log agents now tag their logs with the Vexor host name. The deploy
+  passes --host-name and the installer bakes it into the Vector/fluent-bit
+  config (falling back to the box hostname), so logs show up under the host as
+  Vexor knows it (e.g. an IP-named host) instead of the machine own hostname.
+
 * Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-12
 - Log-shipper deploy now runs as a streamed background job (returns job_id);
   the UI shows live install output instead of an endless spinner. Temp SSH

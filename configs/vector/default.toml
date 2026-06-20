@@ -15,7 +15,7 @@ current_boot_only = true
 type = "remap"
 inputs = ["host_files", "journald"]
 source = '''
-.host = get_env_var("HOSTNAME") ?? "unknown"
+.host = get_hostname() ?? get_env_var("HOSTNAME") ?? "unknown"
 if exists(.SYSTEMD_UNIT) {
   .service = .SYSTEMD_UNIT
 } else if exists(.file) {

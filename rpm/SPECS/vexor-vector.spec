@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-vector
 Version:        0.56.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Vector agent packaged with Vexor Logs defaults
 License:        MPL-2.0
 URL:            https://vector.dev/
@@ -57,6 +57,12 @@ fi
 /usr/lib/systemd/system/vexor-vector.service
 
 %changelog
+* Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.56.0-2
+- Fix host label: the built-in shipper tagged every log host="unknown" because
+  get_env_var("HOSTNAME") is empty under systemd. Use get_hostname() so logs are
+  tagged with the real node hostname. %config(noreplace) keeps existing configs;
+  restart vexor-vector to pick up the new default on a fresh install.
+
 * Tue Nov 18 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.56.0-1
 - Update bundled Vector to 0.56.0.
 * Mon Nov 17 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.55.0-1
