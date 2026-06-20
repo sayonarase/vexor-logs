@@ -1,0 +1,15 @@
+{
+  "id": "openedge-db-connection-errors",
+  "name": "OpenEdge database connection / limit errors",
+  "description": "Database log (.lg) connection, login and resource-limit problems: maximum users/connections reached, connection refused/denied, semaphore or shared-memory exhaustion. Complements the OpenEdge database (.lg) errors preset.",
+  "query": "file:~\".lg\" _msg:~\"(maximum number of (users|clients|connections)|too many (users|connections)|connect.*(refused|denied|fail)|login by user .* failed|exceeded.*-L|out of free|semaphore|shared memory)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "progress",
+    "openedge",
+    "database",
+    "linux"
+  ]
+}

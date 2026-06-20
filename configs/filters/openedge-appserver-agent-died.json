@@ -1,0 +1,15 @@
+{
+  "id": "openedge-appserver-agent-died",
+  "name": "OpenEdge AppServer/agent died",
+  "description": "An AppServer or PASOE agent/server process died, crashed or was disconnected unexpectedly (SrvrDied, agent terminated, MSAgent exited). Matches any OpenEdge log.",
+  "query": "_msg:~\"(SrvrDied|server .* (died|terminated)|agent .* (died|terminated|crashed)|MSAgent .* (died|exited|terminated)|abnormal(ly)? (terminat|shut|end))\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "progress",
+    "openedge",
+    "appserver",
+    "linux"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "openedge-broker-errors",
+  "name": "OpenEdge AppServer / WebSpeed broker errors (OE 11/12)",
+  "description": "Classic AppServer or WebSpeed broker log (<broker>.broker.log) reporting failures: broker/agent died, unable to start or bind, connection refused, or shutdowns.",
+  "query": "file:~\".broker.log\" _msg:~\"(FATAL|ERROR|died|abnormal|Unable to|Cannot |refused|terminated|shut ?down|failed to)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "progress",
+    "openedge",
+    "broker",
+    "appserver",
+    "linux"
+  ]
+}

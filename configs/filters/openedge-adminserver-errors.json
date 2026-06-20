@@ -1,0 +1,15 @@
+{
+  "id": "openedge-adminserver-errors",
+  "name": "OpenEdge AdminServer errors",
+  "description": "AdminServer log (admserv.log) at SEVERE/ERROR/FATAL or Java exceptions - the service that manages brokers, databases and NameServers.",
+  "query": "file:~\"admserv\" _msg:~\"(SEVERE|FATAL|ERROR|Exception|Unable to|failed)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "progress",
+    "openedge",
+    "adminserver",
+    "linux"
+  ]
+}

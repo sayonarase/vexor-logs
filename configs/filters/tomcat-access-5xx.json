@@ -1,0 +1,14 @@
+{
+  "id": "tomcat-access-5xx",
+  "name": "Tomcat access log 5xx",
+  "description": "Server-error responses (HTTP 5xx) in the Tomcat access log (localhost_access_log.<date>.txt). Spikes indicate the app is failing requests.",
+  "query": "file:~\"access\" _msg:~\"HTTP/[0-9.]+. 5[0-9][0-9] \"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 10,
+  "tags": [
+    "tomcat",
+    "web",
+    "http"
+  ]
+}

@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        15%{?dist}
+Release:        16%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -157,6 +157,12 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sun Jun 21 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-16
+- Filter library: add 10 ready-made filters for Progress OpenEdge 11/12 and
+  Apache Tomcat (PASOE agent/server errors, classic AppServer/WebSpeed broker
+  failures, agent/server died, AdminServer, NameServer, DB .lg connection
+  errors; Tomcat engine errors, startup/OOM failures, access-log 5xx).
+
 * Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-15
 - Filter library: add 20 ready-made log filters for common Linux and Windows
   servers (disk full, filesystem/disk I/O errors, kernel panic, hardware/MCE,

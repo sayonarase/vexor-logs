@@ -1,0 +1,14 @@
+{
+  "id": "tomcat-errors",
+  "name": "Tomcat errors (catalina/localhost)",
+  "description": "Apache Tomcat engine logs (catalina.out / catalina.<date>.log / localhost.<date>.log) at SEVERE/ERROR/FATAL, including Java exceptions and stack-trace roots.",
+  "query": "(file:~\"catalina\" or file:~\"localhost..*.log\") _msg:~\"(SEVERE|FATAL|ERROR|Exception|Caused by:)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "tomcat",
+    "java",
+    "web"
+  ]
+}

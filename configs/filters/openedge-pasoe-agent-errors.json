@@ -1,0 +1,16 @@
+{
+  "id": "openedge-pasoe-agent-errors",
+  "name": "OpenEdge PASOE agent errors (OE 11.6/12)",
+  "description": "Progress Application Server (PASOE) ABL agent log (<instance>.agent.log / openedge.<instance>.log) at ERROR/FATAL/SEVERE - ABL run-time errors, unhandled stops, agent problems.",
+  "query": "(file:~\".agent.log\" or file:~\"openedge..*.log\") _msg:~\"(FATAL|ERROR|SEVERE)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "progress",
+    "openedge",
+    "pasoe",
+    "appserver",
+    "linux"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "openedge-nameserver-errors",
+  "name": "OpenEdge NameServer errors",
+  "description": "NameServer log (<ns>.ns.log) reporting registration or routing problems (no available application service, broker not registered, unable to connect).",
+  "query": "file:~\".ns.log\" _msg:~\"(FATAL|ERROR|Unable to|no available|not registered|no broker)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "progress",
+    "openedge",
+    "nameserver",
+    "linux"
+  ]
+}

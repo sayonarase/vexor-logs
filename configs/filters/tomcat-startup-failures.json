@@ -1,0 +1,14 @@
+{
+  "id": "tomcat-startup-failures",
+  "name": "Tomcat startup / fatal failures",
+  "description": "Tomcat could not start or stay up: OutOfMemoryError, port already in use, context/web-application failed to start, or the server lifecycle failed.",
+  "query": "_msg:~\"(OutOfMemoryError|Address already in use|Failed to start component|failed to start|could not be started|Error (starting|deploying)|LifecycleException|A child container failed during start|threw exception .* in its)\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "tomcat",
+    "java",
+    "web"
+  ]
+}

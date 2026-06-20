@@ -1,0 +1,16 @@
+{
+  "id": "openedge-pasoe-server-errors",
+  "name": "OpenEdge PASOE / Tomcat server errors (OE 11.6/12)",
+  "description": "PASOE server-side log (<instance>.server.log) and the embedded Tomcat (catalina/localhost) logs at SEVERE/ERROR/FATAL or Java exceptions.",
+  "query": "(file:~\".server.log\" or file:~\"catalina\" or file:~\"localhost.*.log\") _msg:~\"(SEVERE|FATAL|ERROR|Exception|Caused by:)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "progress",
+    "openedge",
+    "pasoe",
+    "appserver",
+    "linux"
+  ]
+}
