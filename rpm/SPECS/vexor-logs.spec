@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        13%{?dist}
+Release:        14%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -157,6 +157,12 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-14
+- Fix deployed Vector agents: skip TLS verification for the (commonly
+  self-signed) Vexor ingest endpoint via tls.verify_certificate, and map the
+  log message into _msg plus a service tag - previously remote logs arrived with
+  no message body ("missing _msg field") and the agent failed config validation.
+
 * Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-13
 - Deployed log agents now tag their logs with the Vexor host name. The deploy
   passes --host-name and the installer bakes it into the Vector/fluent-bit

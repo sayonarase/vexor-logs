@@ -132,6 +132,20 @@ type    = "remap"
 inputs  = ["files", "journald"]
 source  = '''
 .host = "${EFFECTIVE_HOST}"
+if exists(.SYSTEMD_UNIT) {
+  .service = .SYSTEMD_UNIT
+} else if exists(.file) {
+  .service = .file
+} else {
+  .service = "unknown"
+}
+if exists(.message) {
+  ._msg = del(.message)
+} else if exists(.MESSAGE) {
+  ._msg = .MESSAGE
+} else if !exists(._msg) {
+  ._msg = ""
+}
 '''
 
 [sinks.vexor]
@@ -142,6 +156,9 @@ encoding.codec = "json"
 framing.method = "newline_delimited"
 compression = "gzip"
 healthcheck.enabled = false
+# Vexor servers commonly use a self-signed cert on the LAN; the ingest endpoint
+# is token-authenticated. Matches the fluent-bit "tls.verify off" behaviour.
+tls.verify_certificate = false
 EOF
   if [[ -n "$TOKEN" ]]; then
     sudo tee -a /etc/vector/vector.toml >/dev/null <<EOF
