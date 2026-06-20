@@ -1,0 +1,13 @@
+{
+  "id": "windows-service-crash",
+  "name": "Windows service crashed",
+  "description": "A Windows service terminated unexpectedly (Service Control Manager event 7031/7034). Text-based match on the rendered event message.",
+  "query": "_msg:~\"terminated unexpectedly\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "windows",
+    "service"
+  ]
+}

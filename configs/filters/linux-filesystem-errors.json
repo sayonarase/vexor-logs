@@ -1,0 +1,14 @@
+{
+  "id": "linux-filesystem-errors",
+  "name": "Filesystem / disk I/O errors",
+  "description": "Kernel-level filesystem or block-device errors: EXT4-fs/XFS errors, Buffer I/O error, medium/ATA errors. Indicates a failing disk or corruption.",
+  "query": "_msg:~\"(EXT4-fs error|XFS \\\\(|Buffer I/O error|blk_update_request: I/O error|critical medium error|critical target error|exception Emask)\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "disk",
+    "kernel",
+    "linux"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "windows-app-hang",
+  "name": "Windows application hang",
+  "description": "Application Hang (event 1002): a program stopped responding.",
+  "query": "_msg:~\"stopped interacting with Windows\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "windows",
+    "application"
+  ]
+}

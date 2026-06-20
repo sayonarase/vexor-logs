@@ -1,0 +1,13 @@
+{
+  "id": "windows-bugcheck",
+  "name": "Windows bugcheck (blue screen)",
+  "description": "Event 1001/BugCheck: the system bugchecked (BSOD) and saved a crash dump.",
+  "query": "_msg:~\"(The computer has rebooted from a bugcheck|Bugcheck code)\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 900,
+  "suggested_threshold": 1,
+  "tags": [
+    "windows",
+    "reliability"
+  ]
+}

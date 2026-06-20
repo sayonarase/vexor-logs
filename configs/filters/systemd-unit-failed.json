@@ -1,0 +1,13 @@
+{
+  "id": "systemd-unit-failed",
+  "name": "systemd service failed",
+  "description": "A systemd unit failed to start or entered a failed state.",
+  "query": "_msg:~\"(Failed to start |entered failed state|Failed with result|Start request repeated too quickly)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "systemd",
+    "linux"
+  ]
+}

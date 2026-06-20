@@ -1,0 +1,13 @@
+{
+  "id": "windows-disk-corruption",
+  "name": "Windows disk / NTFS errors",
+  "description": "Disk or NTFS errors: bad blocks, controller errors, or corrupt filesystem structure (Disk/Ntfs/volsnap sources).",
+  "query": "_msg:~\"(bad block|controller error|file system structure on the disk is corrupt|corrupt and unusable)\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "windows",
+    "disk"
+  ]
+}

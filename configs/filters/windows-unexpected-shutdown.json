@@ -1,0 +1,13 @@
+{
+  "id": "windows-unexpected-shutdown",
+  "name": "Windows unexpected shutdown",
+  "description": "Event 6008: the previous system shutdown was unexpected (crash/power loss/bugcheck).",
+  "query": "_msg:~\"(previous system shutdown.*was unexpected|system has rebooted without cleanly shutting down)\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 900,
+  "suggested_threshold": 1,
+  "tags": [
+    "windows",
+    "reliability"
+  ]
+}

@@ -16,6 +16,7 @@ $VexorUrl = Read-Host "Vexor server URL (e.g. https://vexor.example.com)"
 if ([string]::IsNullOrWhiteSpace($VexorUrl)) { throw "URL required" }
 
 $Token = Read-Host "Bootstrap token (from GUI: Logs > Shippers; blank = none)"
+$HostName = Read-Host "Host name as Vexor knows it (blank = this computer name)"
 $Agent = Read-Host "Agent [vector / fluentbit] (default: vector)"
 if ([string]::IsNullOrWhiteSpace($Agent)) { $Agent = "vector" }
 
@@ -51,4 +52,4 @@ Invoke-WebRequest -Uri "$base/api/v1/logs/install-scripts/install-windows-agent.
 
 Write-Host ""
 Write-Host "=> install-windows-agent.ps1 -VexorUrl $VexorUrl -Agent $Agent -Logs $($Logs -join ',')"
-& powershell -ExecutionPolicy Bypass -File $tmp -VexorUrl $VexorUrl -Token $Token -Agent $Agent -Logs $Logs
+& powershell -ExecutionPolicy Bypass -File $tmp -VexorUrl $VexorUrl -Token $Token -Agent $Agent -Logs $Logs -HostName $HostName

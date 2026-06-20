@@ -1,0 +1,13 @@
+{
+  "id": "windows-account-lockout",
+  "name": "Windows account lockout",
+  "description": "Security event 4740: a user account was locked out after repeated bad passwords.",
+  "query": "_msg:~\"was locked out\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 900,
+  "suggested_threshold": 1,
+  "tags": [
+    "windows",
+    "security"
+  ]
+}

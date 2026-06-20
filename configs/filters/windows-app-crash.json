@@ -1,0 +1,13 @@
+{
+  "id": "windows-app-crash",
+  "name": "Windows application crash",
+  "description": "Application Error (event 1000): a process faulted (\"Faulting application ...\").",
+  "query": "_msg:~\"Faulting application\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "windows",
+    "application"
+  ]
+}

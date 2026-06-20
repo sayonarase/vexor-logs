@@ -1,0 +1,14 @@
+{
+  "id": "time-sync-lost",
+  "name": "Clock not synchronised (NTP/chrony)",
+  "description": "The time daemon lost sync or stepped the clock (chronyd/ntpd/systemd-timesyncd). Bad time breaks TLS, Kerberos and log correlation. Message-text match so it works across shippers.",
+  "query": "_msg:~\"(Time service has not synchronized|System clock wrong by|clock unsynchroni|no servers can be used|cannot reach any|Forward time jump|stepping system clock|System clock was stepped)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 900,
+  "suggested_threshold": 1,
+  "tags": [
+    "time",
+    "ntp",
+    "linux"
+  ]
+}

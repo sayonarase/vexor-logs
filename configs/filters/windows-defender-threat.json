@@ -1,0 +1,14 @@
+{
+  "id": "windows-defender-threat",
+  "name": "Windows Defender detected malware",
+  "description": "Microsoft Defender Antivirus reported a detected threat/malware (events 1116/1117).",
+  "query": "_msg:~\"(Defender Antivirus|Antimalware).{0,80}(detected|found|malware|threat)\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "windows",
+    "security",
+    "antivirus"
+  ]
+}

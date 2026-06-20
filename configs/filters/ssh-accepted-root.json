@@ -1,0 +1,14 @@
+{
+  "id": "ssh-accepted-root",
+  "name": "Direct root SSH login",
+  "description": "A successful interactive SSH login as root (any auth method). Surface this where direct root login should not happen. Matches the sshd message text, so it works whether logs arrive via journald or /var/log/secure.",
+  "query": "_msg:~\"Accepted (password|publickey|keyboard-interactive).* for root \"",
+  "suggested_severity": "info",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "security",
+    "ssh",
+    "linux"
+  ]
+}

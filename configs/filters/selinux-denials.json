@@ -1,0 +1,14 @@
+{
+  "id": "selinux-denials",
+  "name": "SELinux AVC denials",
+  "description": "SELinux denied an operation (avc: denied). Often blocks a service from working as expected.",
+  "query": "_msg:~\"avc: *denied\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 3,
+  "tags": [
+    "security",
+    "selinux",
+    "linux"
+  ]
+}

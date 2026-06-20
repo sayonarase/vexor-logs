@@ -1,0 +1,13 @@
+{
+  "id": "linux-disk-space-full",
+  "name": "Disk full (no space left)",
+  "description": "A write failed because a filesystem is out of space (No space left on device). Almost always service-affecting.",
+  "query": "_msg:~\"No space left on device\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "disk",
+    "linux"
+  ]
+}

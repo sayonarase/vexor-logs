@@ -1,0 +1,15 @@
+{
+  "id": "mariadb-mysql-errors",
+  "name": "MariaDB / MySQL errors",
+  "description": "MariaDB/MySQL server [ERROR] log lines (crash recovery, aborted connections, table corruption, replication errors).",
+  "query": "(service:~\"(mysqld|mariadb)\" or file:~\"(mysql|mariadb)\") _msg:~\"\\\\[ERROR\\\\]\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 3,
+  "tags": [
+    "database",
+    "mysql",
+    "mariadb",
+    "linux"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "linux-kernel-panic",
+  "name": "Kernel panic / oops",
+  "description": "Kernel panic, oops or BUG - the host crashed or is unstable.",
+  "query": "_msg:~\"(Kernel panic|kernel BUG at|Oops:|general protection fault|unable to handle kernel)\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 900,
+  "suggested_threshold": 1,
+  "tags": [
+    "kernel",
+    "linux"
+  ]
+}

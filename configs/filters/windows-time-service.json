@@ -1,0 +1,13 @@
+{
+  "id": "windows-time-service",
+  "name": "Windows Time service problem",
+  "description": "W32Time could not sync with a time source. Bad time breaks Kerberos/AD auth.",
+  "query": "_msg:~\"(Time Provider NtpClient|time service has not synchronized|no response from a domain controller)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 900,
+  "suggested_threshold": 1,
+  "tags": [
+    "windows",
+    "time"
+  ]
+}

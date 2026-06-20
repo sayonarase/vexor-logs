@@ -1,0 +1,14 @@
+{
+  "id": "linux-hardware-mce",
+  "name": "Hardware / machine-check errors",
+  "description": "Correctable/uncorrectable hardware errors reported via MCE/EDAC (CPU, memory, PCIe). Early warning of failing hardware.",
+  "query": "_msg:~\"(Hardware Error|Machine check|mce: \\\\[|EDAC|corrected error|uncorrectable error|PCIe Bus Error)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 900,
+  "suggested_threshold": 1,
+  "tags": [
+    "hardware",
+    "kernel",
+    "linux"
+  ]
+}

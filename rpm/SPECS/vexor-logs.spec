@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        14%{?dist}
+Release:        15%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -157,6 +157,19 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-15
+- Filter library: add 20 ready-made log filters for common Linux and Windows
+  servers (disk full, filesystem/disk I/O errors, kernel panic, hardware/MCE,
+  failed systemd units, MariaDB/MySQL errors, SELinux denials, fail2ban bans,
+  time sync loss, NFS stalls, root SSH login; Windows service/app crashes,
+  unexpected shutdown, disk/NTFS errors, account lockout, Defender detections,
+  failed logons, bugcheck, time service). Linux filters match on message text so
+  they work whether logs arrive via journald or files. Dropped the broken
+  windows-event-critical preset (its source_type match never fired).
+- Windows agent: deployed Vector now labels logs with the Vexor host name
+  (new -HostName parameter, mirrors the Linux agent) and always populates _msg,
+  so Windows logs show under the right host and the windows-* filters match.
+
 * Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-14
 - Fix deployed Vector agents: skip TLS verification for the (commonly
   self-signed) Vexor ingest endpoint via tls.verify_certificate, and map the

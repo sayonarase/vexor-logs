@@ -1,13 +1,13 @@
 {
+  "id": "windows-failed-logons",
+  "name": "Windows failed logons",
+  "description": "Security event 4625: an account failed to log on (bad password, locked, disabled). Matches the rendered message text.",
+  "query": "_msg:~\"An account failed to log on\"",
+  "suggested_severity": "warning",
   "suggested_window_sec": 600,
   "suggested_threshold": 10,
-  "query": "source_type:~\"winlog\" event_id:4625",
   "tags": [
     "windows",
     "security"
-  ],
-  "name": "Windows failed logons",
-  "id": "windows-failed-logons",
-  "description": "Windows Security event 4625",
-  "suggested_severity": "warning"
+  ]
 }

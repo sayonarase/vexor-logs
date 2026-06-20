@@ -1,0 +1,14 @@
+{
+  "id": "nfs-server-not-responding",
+  "name": "NFS server not responding",
+  "description": "An NFS client lost contact with its server or hit a stale handle - mounts may hang.",
+  "query": "_msg:~\"(nfs: server .* not responding|NFS server .* not responding|Stale file handle)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "storage",
+    "nfs",
+    "linux"
+  ]
+}

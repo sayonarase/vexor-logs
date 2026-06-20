@@ -1,0 +1,14 @@
+{
+  "id": "fail2ban-bans",
+  "name": "fail2ban bans",
+  "description": "fail2ban banned a host for repeated auth failures - a useful security signal. Matches the fail2ban log text (journald unit or /var/log/fail2ban.log).",
+  "query": "_msg:~\"fail2ban.actions\" _msg:~\" Ban \"",
+  "suggested_severity": "info",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "security",
+    "fail2ban",
+    "linux"
+  ]
+}

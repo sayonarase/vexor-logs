@@ -22,7 +22,8 @@ param(
   [Parameter(Mandatory=$true)][string]$VexorUrl,
   [string]$Token = "",
   [ValidateSet("vector","fluentbit")][string]$Agent = "vector",
-  [string[]]$Logs = @("Application","System","Security")
+  [string[]]$Logs = @("Application","System","Security"),
+  [string]$HostName = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +31,8 @@ $ErrorActionPreference = "Stop"
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
   throw "Must be run from an elevated PowerShell."
 }
+
+$EffectiveHost = if ([string]::IsNullOrWhiteSpace($HostName)) { $env:COMPUTERNAME } else { $HostName }
 
 $VectorVersion = "0.55.0"
 $InstallDir = "C:\Program Files\Vexor\vector"
@@ -76,7 +79,8 @@ function Write-VectorConfig {
   $toml += '[transforms.add_host]'
   $toml += 'type    = "remap"'
   $toml += 'inputs  = ["winlog"]'
-  $toml += 'source  = ''.host = get_hostname!()'''
+  $vrl = ".host = `"$EffectiveHost`"`nif !exists(._msg) {`n  ._msg = to_string(.message) ?? to_string(.Message) ?? to_string(.RenderingInfo.Message) ?? encode_json(.)`n}"
+  $toml += "source  = '''`n$vrl`n'''"
   $toml += ''
   $toml += '[sinks.vexor]'
   $toml += 'type    = "http"'
