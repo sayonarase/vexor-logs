@@ -12,6 +12,7 @@ import os
 import shlex
 import socket
 import subprocess
+from app.services import jobs
 import tempfile
 from pathlib import Path
 from typing import Literal, Optional
@@ -105,6 +106,31 @@ def _public_url() -> str:
     return os.environ.get("VEXOR_PUBLIC_URL", f"https://{socket.gethostname()}")
 
 
+def _ssh_argv(host: str, port: int, user: str,
+              key_path: Optional[str] = None,
+              password: Optional[str] = None,
+              remote_cmd: str = "") -> tuple[list, Optional[dict]]:
+    """Build the ssh/sshpass argv + env (shared by _ssh_run and streamed jobs)."""
+    base = ["-o", "StrictHostKeyChecking=accept-new", "-o", "UserKnownHostsFile=/var/lib/vexor/known_hosts",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "ConnectTimeout=15",
+            "-p", str(port)]
+    if key_path:
+        args = ["ssh", "-o", "BatchMode=yes", "-i", key_path] + base + [f"{user}@{host}", remote_cmd]
+        env = None
+    elif password:
+        args = ["sshpass", "-e", "ssh",
+                "-o", "PreferredAuthentications=password",
+                "-o", "PubkeyAuthentication=no",
+                "-o", "NumberOfPasswordPrompts=1"] + base + [f"{user}@{host}", remote_cmd]
+        env = os.environ.copy()
+        env["SSHPASS"] = password
+    else:
+        args = ["ssh", "-o", "BatchMode=yes"] + base + [f"{user}@{host}", remote_cmd]
+        env = None
+    return args, env
+
+
 def _ssh_run(host: str, port: int, user: str,
              key_path: Optional[str] = None,
              password: Optional[str] = None,
@@ -139,7 +165,7 @@ def _ssh_run(host: str, port: int, user: str,
 
 
 @router.post("/deploy-shipper")
-def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
+async def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
     _decrypted_key_path = None
     if body.transport == "winrm":
         target = "windows"
@@ -252,14 +278,20 @@ def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
             remote = f"sudo bash -s -- {" ".join(args)}" if user != "root" else f"bash -s -- {" ".join(args)}"
             stdin_payload = scr.encode("utf-8")
 
-        rc, out, err = _ssh_run(target_host, body.port, user,
-                                key_path=key, password=password,
-                                remote_cmd=remote, stdin=stdin_payload)
+        # Run the install as a streamed background job so the UI shows live
+        # progress instead of an endless spinner. Ownership of the temp key is
+        # handed to the job (cleaned up when it finishes).
+        args, env = _ssh_argv(target_host, body.port, user,
+                              key_path=key, password=password, remote_cmd=remote)
+        cleanup = [_decrypted_key_path] if _decrypted_key_path else None
+        job_id = jobs.start_local(
+            [(f"Installing log shipper on {target_host}", args)],
+            env=env, stdin=stdin_payload, cleanup_paths=cleanup,
+        )
+        _decrypted_key_path = None  # ownership transferred to the streamed job
         return {
-            "ok": rc == 0,
-            "rc": rc,
-            "stdout": out[-8000:],
-            "stderr": err[-8000:],
+            "ok": True,
+            "job_id": job_id,
             "host": target_host,
             "user": user,
             "agent": body.agent,

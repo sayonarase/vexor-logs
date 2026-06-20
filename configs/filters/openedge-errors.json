@@ -1,0 +1,15 @@
+{
+  "name": "Progress OpenEdge database (.lg) errors",
+  "description": "Progress OpenEdge database log (.lg) fatal/error conditions: SYSTEM ERROR, abnormal shutdown, lock-table overflow, server died, or '** ' error-message lines. Linux OpenEdge deployments.",
+  "query": "file:~\"\\\\.lg\" _msg:~\"(SYSTEM ERROR|ABNORMAL shutdown|abnormal shutdown|Lock table overflow|SrvrDied|database .* not started|\\\\*\\\\* )\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "database",
+    "progress",
+    "openedge",
+    "linux"
+  ],
+  "id": "openedge-errors"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Caddy server errors / 5xx",
+  "description": "Caddy JSON log: entries at level error/fatal/panic, or access-log responses with HTTP 5xx status. Matches caddy journald unit or /var/log/caddy file.",
+  "query": "(service:~\"caddy\" or file:~\"caddy\") _msg:~\"(\\\"level\\\":\\\"(error|fatal|panic)\\\"|\\\"status\\\":5[0-9][0-9])\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 5,
+  "tags": [
+    "web",
+    "caddy"
+  ],
+  "id": "caddy-errors"
+}

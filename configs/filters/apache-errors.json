@@ -1,0 +1,14 @@
+{
+  "name": "Apache / httpd error log",
+  "description": "Apache httpd error log: [error]/[crit]/[alert]/[emerg], AHxxxxx diagnostic codes, or child segfaults. Matches httpd/apache journald unit or /var/log file.",
+  "query": "(service:~\"(httpd|apache)\" or file:~\"(httpd|apache)\") _msg:~\"(\\\\[(error|crit|alert|emerg)\\\\]|segfault|exit signal Segmentation)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 5,
+  "tags": [
+    "web",
+    "apache",
+    "httpd"
+  ],
+  "id": "apache-errors"
+}

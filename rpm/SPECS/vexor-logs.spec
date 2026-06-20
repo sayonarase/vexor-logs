@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        11%{?dist}
+Release:        12%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -157,6 +157,13 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-12
+- Log-shipper deploy now runs as a streamed background job (returns job_id);
+  the UI shows live install output instead of an endless spinner. Temp SSH
+  keys are cleaned up when the job finishes.
+- Add ready-made log-alert filters for nginx, Apache/httpd, Caddy and Progress
+  OpenEdge (.lg) under /etc/vexor/logs/filters/.
+
 * Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-11
 - Log-data-driven checks: log alert rules gain mode=match|absence (dead-man),
   warn/crit thresholds, level filter and per-host grouping; each becomes a

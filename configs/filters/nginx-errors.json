@@ -1,0 +1,13 @@
+{
+  "name": "nginx error log (error/crit)",
+  "description": "nginx error.log lines at [error]/[crit]/[alert]/[emerg] (upstream timed out, connection refused, worker died). Matches journald unit or /var/log/nginx files.",
+  "query": "(service:~\"nginx\" or file:~\"nginx\") _msg:~\"\\\\[(error|crit|alert|emerg)\\\\]\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 5,
+  "tags": [
+    "web",
+    "nginx"
+  ],
+  "id": "nginx-errors"
+}
