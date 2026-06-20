@@ -1,0 +1,14 @@
+{
+  "id": "mssql-io-corruption",
+  "name": "SQL Server I/O / corruption errors",
+  "description": "Storage and consistency errors (823/824/825), logical-consistency I/O errors, torn pages, bad checksums and CHECKDB/DBCC reported corruption. Treat as urgent - data integrity may be at risk.",
+  "query": "_msg:~\"(Error: 82[345][,. ]|logical consistency-based I/O error|incorrect checksum|torn page|detected a logical consistency|consistency errors in|allocation errors)\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "mssql",
+    "sql-server",
+    "database"
+  ]
+}

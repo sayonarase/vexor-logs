@@ -1,0 +1,14 @@
+{
+  "id": "mssql-out-of-memory",
+  "name": "SQL Server memory pressure",
+  "description": "Out-of-memory and allocation failures (errors 701/802, 'insufficient system memory', failed page allocations). Indicates the instance is under memory pressure.",
+  "query": "_msg:~\"(There is insufficient system memory|Failed to allocate|Error: 70[12][,. ]|Error: 802[,. ]|Failed allocate pages|out of memory condition)\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "mssql",
+    "sql-server",
+    "database"
+  ]
+}

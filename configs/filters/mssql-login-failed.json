@@ -1,0 +1,14 @@
+{
+  "id": "mssql-login-failed",
+  "name": "SQL Server login failures",
+  "description": "Failed logins (error 18456) in the SQL Server error log or Application event log - wrong password, disabled/locked account or untrusted domain. Spikes can indicate a brute-force attempt.",
+  "query": "_msg:~\"Login failed for user\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 5,
+  "tags": [
+    "mssql",
+    "sql-server",
+    "database"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "mssql-deadlocks",
+  "name": "SQL Server deadlocks",
+  "description": "Deadlock victims (error 1205) and deadlock graphs - one transaction was killed to resolve a lock cycle. Frequent deadlocks point at a query/indexing problem.",
+  "query": "_msg:~\"(was deadlocked on lock|deadlock-list|chosen as the deadlock victim)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "mssql",
+    "sql-server",
+    "database"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "mssql-high-severity-errors",
+  "name": "SQL Server high-severity errors (17-25)",
+  "description": "Microsoft SQL Server errors at severity 17-25 in the SQL Server error log (ERRORLOG) or Windows Application event log - resource problems, internal errors and fatal conditions. Stable across SQL Server 2014-2022.",
+  "query": "_msg:~\"Severity: (1[7-9]|2[0-5])\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "mssql",
+    "sql-server",
+    "database"
+  ]
+}

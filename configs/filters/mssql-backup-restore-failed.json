@@ -1,0 +1,14 @@
+{
+  "id": "mssql-backup-restore-failed",
+  "name": "SQL Server backup / restore failures",
+  "description": "BACKUP or RESTORE operations that failed, including operating-system errors while reading or writing backup files. Missed backups break your recovery point objective.",
+  "query": "_msg:~\"(BACKUP failed|RESTORE failed|BACKUP DATABASE .* terminating abnormally|Operating system error .* (backup|restore))\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 600,
+  "suggested_threshold": 1,
+  "tags": [
+    "mssql",
+    "sql-server",
+    "database"
+  ]
+}

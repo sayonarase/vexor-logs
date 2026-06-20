@@ -1,0 +1,15 @@
+{
+  "id": "mssql-ag-connection-lease",
+  "name": "Always On AG connectivity / lease loss",
+  "description": "Availability-group connectivity problems: connection timeouts, dropped primary/secondary connections, expired cluster lease or WSFC health-check timeouts that can trigger an unwanted failover.",
+  "query": "_msg:~\"(lease between availability group|Availability Groups connection with (primary|secondary) database .* terminated|connection timeout has occurred|health check timeout|lost communication with .* Windows Server Failover Cluster|availability group .* offline because the WSFC)\"",
+  "suggested_severity": "critical",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "mssql",
+    "sql-server",
+    "availability-group",
+    "alwayson"
+  ]
+}

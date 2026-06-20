@@ -1,0 +1,15 @@
+{
+  "id": "mssql-ag-not-synchronizing",
+  "name": "Always On AG not synchronizing",
+  "description": "An availability database is suspended or has stopped synchronizing (NOT SYNCHRONIZING / data movement suspended). The secondary is falling behind and may not be a valid failover target.",
+  "query": "_msg:~\"(NOT SYNCHRONIZING|is suspended|data movement .* suspended|availability database .* is changing states .* SUSPENDED|is not synchronizing)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "mssql",
+    "sql-server",
+    "availability-group",
+    "alwayson"
+  ]
+}

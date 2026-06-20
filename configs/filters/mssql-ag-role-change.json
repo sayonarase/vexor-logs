@@ -1,0 +1,15 @@
+{
+  "id": "mssql-ag-role-change",
+  "name": "Always On AG role change / failover",
+  "description": "An Always On availability group changed roles (failover) or the replica manager went offline. Expect this during a planned failover - unexpected changes need investigation.",
+  "query": "_msg:~\"(availability group .* is changing roles|availability replica manager is going offline|is changing roles from .* to|The local availability replica of availability group .* is changing)\"",
+  "suggested_severity": "warning",
+  "suggested_window_sec": 300,
+  "suggested_threshold": 1,
+  "tags": [
+    "mssql",
+    "sql-server",
+    "availability-group",
+    "alwayson"
+  ]
+}
