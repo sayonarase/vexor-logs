@@ -1,0 +1,14 @@
+[Unit]
+Description=Vexor Logs - per-host retention enforcer (daily trim)
+After=network.target vexor-victorialogs.service
+Wants=vexor-victorialogs.service
+
+[Service]
+Type=oneshot
+User=vexor
+Group=vexor
+EnvironmentFile=-/etc/vexor/logs.env
+EnvironmentFile=-/etc/vexor/db.env
+WorkingDirectory=/opt/vexor/api
+Environment=PYTHONPATH=/opt/vexor/api:/opt/vexor/api/plugins
+ExecStart=/usr/bin/vexor-logs-retention-enforcer

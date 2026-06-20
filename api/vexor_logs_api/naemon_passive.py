@@ -101,7 +101,7 @@ def _read_blocks() -> dict[str, str]:
     return blocks
 
 
-_LOCK_FILE = Path("/var/lock/vexor-logs-services.lock")
+_LOCK_FILE = Path("/run/vexor/vexor-logs-services.lock")
 
 
 def _lock():

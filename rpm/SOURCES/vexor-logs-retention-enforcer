@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+export PYTHONPATH=/opt/vexor/api:/opt/vexor/api/plugins${PYTHONPATH:+:$PYTHONPATH}
+cd /opt/vexor/api
+exec /opt/vexor/api/venv/bin/python -m logs.retention_enforcer "$@"

@@ -2,9 +2,17 @@
 
 Polls VictoriaLogs for each enabled rule, counts matches in the configured
 window, and:
-  * POSTs to vexor-api's /v1/notifications/dispatch when threshold is exceeded
+  * POSTs to vexor-api's /v1/notifications/dispatch when the rule fires
   * if the rule has ``host_binding`` set, submits a passive service check
-    result to Naemon so the failure shows up in the monitoring console.
+    result to Naemon so the failure shows up in the monitoring console (and
+    therefore in SLA reports, BSM and notifications).
+
+Two evaluation modes (column ``mode``):
+  * ``match``   - fire when the match count crosses warn/crit thresholds
+                  (classic log-content alert, e.g. SSH brute force).
+  * ``absence`` - fire when too FEW logs arrive in the window (dead-man /
+                  "logs stopped coming in"). Used for per-host log-freshness
+                  checks; goes CRITICAL when a host stops shipping logs.
 
 State (last_fired/last_count) is persisted in the shared database.
 """
@@ -19,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from . import _client
-from .models import LogAlertRule
+from .models import LogAlertRule, LogAlertEvent
 from .naemon_passive import (
     slugify_rule_name, service_name, submit_passive_result,
     host_exists, _validate_host_name, InvalidHostName,
@@ -35,6 +43,42 @@ NOTIFY_URL    = os.environ.get(
 _SEV_TO_RC = {"info": 0, "ok": 0, "warning": 1, "critical": 2, "unknown": 3}
 
 
+def evaluate_rule(mode: str, count: int, window_sec: int,
+                  threshold: int, warn_threshold, crit_threshold,
+                  severity: str) -> tuple[bool, int, str]:
+    """Pure decision function. Returns (fired, naemon_rc, plugin_output).
+
+    Shared with the unit tests so the alerting semantics are pinned.
+    """
+    mode = (mode or "match").lower()
+    sev = (severity or "warning").lower()
+    if mode == "absence":
+        need = threshold if threshold and threshold > 0 else 1
+        if count >= need:
+            return (False, 0,
+                    f"OK: {count} log line(s) received in last {window_sec}s "
+                    f"(expected >= {need})")
+        rc = _SEV_TO_RC.get(sev, 2)  # dead-man defaults to CRITICAL
+        return (True, rc,
+                f"{sev.upper()}: only {count} log line(s) in last {window_sec}s "
+                f"(expected >= {need}) - source may be down")
+    # --- match mode ---
+    if crit_threshold is not None and count >= crit_threshold:
+        return (True, 2,
+                f"CRITICAL: {count} match(es) in last {window_sec}s "
+                f"(>= {crit_threshold})")
+    if warn_threshold is not None and count >= warn_threshold:
+        return (True, 1,
+                f"WARNING: {count} match(es) in last {window_sec}s "
+                f"(>= {warn_threshold})")
+    if warn_threshold is None and crit_threshold is None and count >= threshold:
+        rc = _SEV_TO_RC.get(sev, 1)
+        return (True, rc,
+                f"{sev.upper()}: {count} match(es) in last {window_sec}s "
+                f"(>= {threshold})")
+    return (False, 0, f"OK: {count} match(es) in last {window_sec}s")
+
+
 async def _evaluate_once(session_factory) -> None:
     async with session_factory() as db:
         rules = (await db.execute(
@@ -43,15 +87,36 @@ async def _evaluate_once(session_factory) -> None:
         for r in rules:
             try:
                 start = (datetime.now(timezone.utc) - timedelta(seconds=r.window_sec)).isoformat()
-                qlimit = max(r.threshold * 10, 1000)
+                mode = (getattr(r, "mode", None) or "match").lower()
+                warn = getattr(r, "warn_threshold", None)
+                crit = getattr(r, "crit_threshold", None)
+                # For absence we only need to know whether the threshold is
+                # reached, so a small limit is enough; for match we want to be
+                # able to count up to the highest threshold of interest.
+                hi = max([t for t in (r.threshold, warn, crit) if t] or [1])
+                qlimit = max(hi * 10, 1000)
+
                 def _do_query():
                     return _client.query(r.query, limit=qlimit, start=start)
                 rows = await asyncio.to_thread(_do_query)
                 count = len(rows)
                 r.last_count = count
-                fired = count >= r.threshold
-                import os as _os
-                COOLDOWN = int(_os.environ.get("VEXOR_LOG_ALERT_COOLDOWN_SEC", "600"))
+
+                fired, rc, output = evaluate_rule(
+                    mode, count, r.window_sec, r.threshold, warn, crit, r.severity)
+
+                prev_state = r.last_state
+                if prev_state != rc:
+                    db.add(LogAlertEvent(
+                        rule_id=r.id, rule_name=r.name,
+                        host=getattr(r, "host_binding", None),
+                        mode=mode, severity=r.severity,
+                        state=rc, prev_state=prev_state,
+                        count=count, output=output,
+                    ))
+                    r.last_state = rc
+
+                COOLDOWN = int(os.environ.get("VEXOR_LOG_ALERT_COOLDOWN_SEC", "600"))
                 may_dispatch = False
                 if fired:
                     now = datetime.now(timezone.utc)
@@ -66,16 +131,15 @@ async def _evaluate_once(session_factory) -> None:
                     if may_dispatch:
                         r.last_fired = now
                 if may_dispatch:
-                    await asyncio.to_thread(_dispatch, r, count, rows)
+                    await asyncio.to_thread(_dispatch, r, count, rows, mode, output)
+
                 # Always update naemon state when a binding exists so the
-                # service moves back to OK when matches drop below threshold.
+                # service moves back to OK once the condition clears.
                 host = getattr(r, "host_binding", None)
                 if host:
-                    # Only submit a passive result for a valid, known Naemon
-                    # host. A stale/garbage host_binding (e.g. a host that was
-                    # deleted, or one inserted out-of-band) would otherwise make
-                    # naemon reject the external command every cycle and spam
-                    # naemon.log (log-16).
+                    # Only submit for a valid, known Naemon host. A stale or
+                    # garbage host_binding would otherwise make naemon reject the
+                    # external command every cycle and spam naemon.log (log-16).
                     try:
                         valid_host = _validate_host_name(host)
                         known = host_exists(valid_host)
@@ -87,13 +151,6 @@ async def _evaluate_once(session_factory) -> None:
                                   r.name, host)
                     else:
                         svc = service_name(slugify_rule_name(r.name))
-                        if fired:
-                            rc = _SEV_TO_RC.get((r.severity or "warning").lower(), 1)
-                            output = (f"{r.severity.upper()}: {count} matches in last "
-                                      f"{r.window_sec}s (threshold {r.threshold})")
-                        else:
-                            rc = 0
-                            output = f"OK: {count} matches in last {r.window_sec}s"
                         submit_passive_result(valid_host, svc, rc, output)
                 await db.commit()
             except Exception as e:
@@ -101,12 +158,21 @@ async def _evaluate_once(session_factory) -> None:
                 await db.rollback()
 
 
-def _dispatch(rule: LogAlertRule, count: int, sample_rows: list) -> None:
+def _dispatch(rule: LogAlertRule, count: int, sample_rows: list,
+              mode: str = "match", output: str = "") -> None:
+    if mode == "absence":
+        summary = (f"[{rule.severity}] log-freshness rule '{rule.name}' - only "
+                   f"{count} log line(s) received (source may be down)")
+    else:
+        summary = (f"[{rule.severity}] log rule '{rule.name}' matched "
+                   f"{count} times")
     payload = {
         "source":   "vexor-logs",
         "rule":     rule.name,
+        "mode":     mode,
         "severity": rule.severity,
-        "summary":  f"[{rule.severity}] log rule '{rule.name}' matched {count} times",
+        "summary":  summary,
+        "output":   output,
         "query":    rule.query,
         "count":    count,
         "to":       rule.notify_to,

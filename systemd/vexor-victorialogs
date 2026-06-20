@@ -15,5 +15,45 @@ fi
 : "${VEXOR_LOGS_RETENTION_DAYS:=90}"
 : "${VEXOR_LOGS_LISTEN:=127.0.0.1:9428}"
 : "${VEXOR_LOGS_STORAGE:=/var/lib/vexor/victorialogs}"
+# Disk-based retention: none | bytes | percent. Mutually exclusive in VictoriaLogs.
+: "${VEXOR_LOGS_DISK_MODE:=none}"
+: "${VEXOR_LOGS_DISK_BYTES:=}"
+: "${VEXOR_LOGS_DISK_PERCENT:=}"
+# /delete/* HTTP API — required by the per-host retention enforcer.
+: "${VEXOR_LOGS_DELETE_ENABLE:=1}"
+# Optional native syslog receiver (host:port for udp+tcp). Empty = disabled.
+: "${VEXOR_LOGS_SYSLOG_UDP:=}"
+: "${VEXOR_LOGS_SYSLOG_TCP:=}"
 
-exec /usr/bin/victoria-logs     -storageDataPath="${VEXOR_LOGS_STORAGE}"     -retentionPeriod="${VEXOR_LOGS_RETENTION_DAYS}d"     -httpListenAddr="${VEXOR_LOGS_LISTEN}"     -loggerOutput=stdout
+ARGS=(
+    -storageDataPath="${VEXOR_LOGS_STORAGE}"
+    -retentionPeriod="${VEXOR_LOGS_RETENTION_DAYS}d"
+    -httpListenAddr="${VEXOR_LOGS_LISTEN}"
+    -loggerOutput=stdout
+)
+
+case "${VEXOR_LOGS_DISK_MODE}" in
+    bytes)
+        if [ -n "${VEXOR_LOGS_DISK_BYTES}" ]; then
+            ARGS+=(-retention.maxDiskSpaceUsageBytes="${VEXOR_LOGS_DISK_BYTES}")
+        fi
+        ;;
+    percent)
+        if [ -n "${VEXOR_LOGS_DISK_PERCENT}" ]; then
+            ARGS+=(-retention.maxDiskUsagePercent="${VEXOR_LOGS_DISK_PERCENT}")
+        fi
+        ;;
+esac
+
+if [ "${VEXOR_LOGS_DELETE_ENABLE}" = "1" ]; then
+    ARGS+=(-delete.enable)
+fi
+
+if [ -n "${VEXOR_LOGS_SYSLOG_UDP}" ]; then
+    ARGS+=(-syslog.listenAddr.udp="${VEXOR_LOGS_SYSLOG_UDP}")
+fi
+if [ -n "${VEXOR_LOGS_SYSLOG_TCP}" ]; then
+    ARGS+=(-syslog.listenAddr.tcp="${VEXOR_LOGS_SYSLOG_TCP}")
+fi
+
+exec /usr/bin/victoria-logs "${ARGS[@]}"

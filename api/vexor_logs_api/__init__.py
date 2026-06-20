@@ -11,13 +11,16 @@ Mounted at startup by vexor-api's plugin loader. Exposes:
   * GET  /api/v1/logs/storage         — disk usage + oldest log
   * CRUD /api/v1/logs/saved-searches  — saved searches
   * GET  /api/v1/logs/filter-library  — curated starter filters
-  * POST /api/v1/logs/filter-library/install
   * POST /api/v1/logs/deploy-shipper  — remote install of vector / fluent-bit
   * CRUD /api/v1/log-alerts           — alert rule management
+  * GET  /api/v1/log-checks/catalog   — log-check presets (filters + dead-man)
+  * POST /api/v1/log-checks/for-host  — apply log checks to a host
   * GET  /api/v1/modules              — module discovery (advertises "logs")
 """
 from .logs_router import router as logs_router                       # noqa: F401
 from .log_alerts_router import router as log_alerts_router           # noqa: F401
+from .log_checks_router import router as log_checks_router           # noqa: F401
+from .retention_router import router as retention_router             # noqa: F401
 from .modules_router import router as modules_router                 # noqa: F401
 from .settings_router import router as settings_router               # noqa: F401
 from .saved_searches_router import router as saved_searches_router   # noqa: F401
@@ -28,6 +31,8 @@ from .shipper_router import router as shipper_router                 # noqa: F40
 routers = [
     logs_router,
     log_alerts_router,
+    log_checks_router,
+    retention_router,
     modules_router,
     settings_router,
     saved_searches_router,

@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        10%{?dist}
+Release:        11%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -24,6 +24,12 @@ Source9:        vexor-plugin-deps.sudoers
 Source10:       91-vexor-victorialogs.rules
 Source11:       002_post_v0.1.0-5_schema_drift.sql
 Source12:       vexor-logs-postinstall.sh
+Source13:       003_log_checks.sql
+Source14:       004_log_retention_overrides.sql
+Source15:       005_log_alert_events.sql
+Source16:       vexor-logs-retention-enforcer
+Source17:       vexor-logs-retention-enforcer.service
+Source18:       vexor-logs-retention-enforcer.timer
 
 Requires:       vexor-victorialogs
 Requires:       vexor-api >= 0.1.0-6
@@ -74,6 +80,12 @@ install -Dpm 0755 %{SOURCE8}  %{buildroot}/usr/local/sbin/vexor-cpanm-install
 install -Dpm 0440 %{SOURCE9}  %{buildroot}/etc/sudoers.d/vexor-plugin-deps
 install -Dpm 0644 %{SOURCE10} %{buildroot}/etc/polkit-1/rules.d/91-vexor-victorialogs.rules
 install -Dpm 0644 %{SOURCE11} %{buildroot}/usr/share/vexor-logs/migrations/002_post_v0.1.0-5_schema_drift.sql
+install -Dpm 0644 %{SOURCE13} %{buildroot}/usr/share/vexor-logs/migrations/003_log_checks.sql
+install -Dpm 0644 %{SOURCE14} %{buildroot}/usr/share/vexor-logs/migrations/004_log_retention_overrides.sql
+install -Dpm 0644 %{SOURCE15} %{buildroot}/usr/share/vexor-logs/migrations/005_log_alert_events.sql
+install -Dpm 0755 %{SOURCE16} %{buildroot}/usr/bin/vexor-logs-retention-enforcer
+install -Dpm 0644 %{SOURCE17} %{buildroot}/usr/lib/systemd/system/vexor-logs-retention-enforcer.service
+install -Dpm 0644 %{SOURCE18} %{buildroot}/usr/lib/systemd/system/vexor-logs-retention-enforcer.timer
 install -Dpm 0755 %{SOURCE12} %{buildroot}/usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %post
@@ -97,6 +109,15 @@ fi
 # Reload polkit so bundled rule takes effect (v0.1.0-7)
 systemctl reload polkit 2>/dev/null || systemctl restart polkit 2>/dev/null || :
 
+%systemd_post vexor-logs-retention-enforcer.timer
+# Ensure new logs.env knobs exist (retention disk + syslog receiver)
+for kv in 'VEXOR_LOGS_DISK_MODE=none' 'VEXOR_LOGS_DISK_BYTES=' 'VEXOR_LOGS_DISK_PERCENT=' 'VEXOR_LOGS_SYSLOG_UDP=' 'VEXOR_LOGS_SYSLOG_TCP='; do
+    k=${kv%%=*}
+    grep -q "^${k}=" /etc/vexor/logs.env 2>/dev/null || echo "$kv" >> /etc/vexor/logs.env
+done
+chown root:vexor /etc/vexor/logs.env 2>/dev/null || :
+chmod 0660 /etc/vexor/logs.env 2>/dev/null || :
+systemctl enable --now vexor-logs-retention-enforcer.timer 2>/dev/null || :
 # Apply DB schema drift migrations - idempotent (v0.1.0-7)
 if [ -x /usr/share/vexor-logs/vexor-logs-postinstall.sh ]; then
     /usr/share/vexor-logs/vexor-logs-postinstall.sh || :
@@ -106,9 +127,11 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 
 %preun
 %systemd_preun vexor-log-alerts-evaluator.service
+%systemd_preun vexor-logs-retention-enforcer.timer
 
 %postun
 %systemd_postun_with_restart vexor-log-alerts-evaluator.service
+%systemd_postun vexor-logs-retention-enforcer.timer
 
 %files
 /opt/vexor/api/plugins/logs
@@ -125,9 +148,30 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 %dir /usr/share/vexor-logs
 %dir /usr/share/vexor-logs/migrations
 /usr/share/vexor-logs/migrations/002_post_v0.1.0-5_schema_drift.sql
+/usr/share/vexor-logs/migrations/003_log_checks.sql
+/usr/share/vexor-logs/migrations/004_log_retention_overrides.sql
+/usr/share/vexor-logs/migrations/005_log_alert_events.sql
+/usr/bin/vexor-logs-retention-enforcer
+/usr/lib/systemd/system/vexor-logs-retention-enforcer.service
+/usr/lib/systemd/system/vexor-logs-retention-enforcer.timer
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-11
+- Log-data-driven checks: log alert rules gain mode=match|absence (dead-man),
+  warn/crit thresholds, level filter and per-host grouping; each becomes a
+  first-class passive Naemon service (flows into SLA/BSM/notifications).
+  New /api/v1/log-checks catalog + /for-host bulk apply, and an alert-history
+  log (/api/v1/log-alerts/history) backed by migrations 003 + 005.
+- Configurable retention: global time + disk cap (maxDiskUsage bytes/percent)
+  via logs.env, plus per-host overrides (migration 004) trimmed daily by the
+  new vexor-logs-retention-enforcer.timer (enabled on install).
+- Native syslog receiver (RFC3164/5424, auto-parsed) toggled from Settings.
+- Ship migrations 003/004/005, retention-enforcer wrapper/.service/.timer;
+  ensure logs.env is 0660 root:vexor so the API can persist settings.
+- Fix naemon_passive lock path (/var/lock -> /run/vexor) so passive results
+  submit under the vexor user.
+
 * Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-10
 - evaluator: only submit a passive PROCESS_SERVICE_CHECK_RESULT when the rule's
   host_binding is a valid, known Naemon host. A stale/garbage binding (e.g. a

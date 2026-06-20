@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, AnyHttpUrl
+from pydantic import BaseModel, Field, AnyHttpUrl, model_validator
 
 from . import _client
 
@@ -31,7 +31,32 @@ DEFAULT_RETENTION = 90
 
 class Settings(BaseModel):
     retention_days: int = Field(DEFAULT_RETENTION, ge=1, le=3650)
+    # Disk-based retention (VictoriaLogs drops oldest per-day partitions when the
+    # cap is exceeded). "none" | "bytes" | "percent" — bytes/percent are mutually
+    # exclusive in VictoriaLogs. retention_days still applies independently.
+    disk_mode: str = Field("none", pattern="^(none|bytes|percent)$")
+    disk_bytes: Optional[str] = None        # e.g. "100GiB"
+    disk_percent: Optional[int] = Field(None, ge=1, le=100)
+    # Native VictoriaLogs syslog receiver (RFC3164/5424, auto-parsed into
+    # hostname/app_name/priority/severity/facility fields). Off by default.
+    syslog_enabled: bool = False
+    syslog_udp_port: int = Field(514, ge=1, le=65535)
+    syslog_tcp_port: int = Field(514, ge=1, le=65535)
     vexor_logs_url: Optional[AnyHttpUrl] = None
+
+    @model_validator(mode="after")
+    def _check_disk(self) -> "Settings":
+        if self.disk_mode == "bytes":
+            if not self.disk_bytes or not _DISK_BYTES_RE.match(self.disk_bytes.strip()):
+                raise ValueError(
+                    "disk_bytes must be a size like '100GiB', '500MB', '2TiB'")
+        elif self.disk_mode == "percent":
+            if self.disk_percent is None:
+                raise ValueError("disk_percent (1-100) required when disk_mode=percent")
+        return self
+
+
+_DISK_BYTES_RE = re.compile(r"^\d+(\.\d+)?\s*(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)?$", re.I)
 
 
 def _read_env() -> dict[str, str]:
@@ -67,14 +92,42 @@ def _write_env(updates: dict[str, str]) -> None:
             new_lines.append(f"{k}={v}")
     ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
     ENV_FILE.write_text("\n".join(new_lines).rstrip() + "\n")
+
+
 def _current_settings() -> Settings:
     env = _read_env()
     try:
         rd = int(env.get("VEXOR_LOGS_RETENTION_DAYS", str(DEFAULT_RETENTION)))
     except ValueError:
         rd = DEFAULT_RETENTION
+    disk_mode = env.get("VEXOR_LOGS_DISK_MODE", "none")
+    if disk_mode not in ("none", "bytes", "percent"):
+        disk_mode = "none"
+    disk_percent: Optional[int] = None
+    try:
+        if env.get("VEXOR_LOGS_DISK_PERCENT"):
+            disk_percent = int(env["VEXOR_LOGS_DISK_PERCENT"])
+    except ValueError:
+        disk_percent = None
+    udp = env.get("VEXOR_LOGS_SYSLOG_UDP", "")
+    tcp = env.get("VEXOR_LOGS_SYSLOG_TCP", "")
+    syslog_enabled = bool(udp or tcp)
+
+    def _port(addr: str, default: int) -> int:
+        m = re.search(r":(\d+)\s*$", addr)
+        try:
+            return int(m.group(1)) if m else default
+        except ValueError:
+            return default
+
     return Settings(
         retention_days=rd,
+        disk_mode=disk_mode,
+        disk_bytes=env.get("VEXOR_LOGS_DISK_BYTES") or None,
+        disk_percent=disk_percent,
+        syslog_enabled=syslog_enabled,
+        syslog_udp_port=_port(udp, 514),
+        syslog_tcp_port=_port(tcp, 514),
         vexor_logs_url=env.get("VEXOR_LOGS_URL", "http://127.0.0.1:9428"),
     )
 
@@ -86,18 +139,23 @@ def get_settings(_=Depends(require_viewer)) -> Settings:
 
 @router.put("/settings", response_model=Settings)
 def put_settings(body: Settings, _=Depends(require_admin)) -> Settings:
-    updates = {"VEXOR_LOGS_RETENTION_DAYS": str(body.retention_days)}
+    updates = {
+        "VEXOR_LOGS_RETENTION_DAYS": str(body.retention_days),
+        "VEXOR_LOGS_DISK_MODE": body.disk_mode,
+        "VEXOR_LOGS_DISK_BYTES": body.disk_bytes if body.disk_mode == "bytes" and body.disk_bytes else "",
+        "VEXOR_LOGS_DISK_PERCENT": str(body.disk_percent) if body.disk_mode == "percent" and body.disk_percent else "",
+        "VEXOR_LOGS_SYSLOG_UDP": f":{body.syslog_udp_port}" if body.syslog_enabled else "",
+        "VEXOR_LOGS_SYSLOG_TCP": f":{body.syslog_tcp_port}" if body.syslog_enabled else "",
+    }
     if body.vexor_logs_url:
-        updates["VEXOR_LOGS_URL"] = body.vexor_logs_url
+        updates["VEXOR_LOGS_URL"] = str(body.vexor_logs_url)
     try:
         _write_env(updates)
     except PermissionError as e:
         raise HTTPException(500, f"cannot write {ENV_FILE}: {e}")
-    # Restart victorialogs so -retentionPeriod is re-applied. We run as the
-    # vexor user, so use sudo (a NOPASSWD rule in /etc/sudoers.d/vexor-logs
-    # whitelists exactly this command).
-    # Non-root systemctl restart works via polkit rule
-    # /etc/polkit-1/rules.d/91-vexor-victorialogs.rules
+    # Restart victorialogs so the retention flags are re-applied. We run as the
+    # vexor user; non-root systemctl restart works via the polkit rule
+    # /etc/polkit-1/rules.d/91-vexor-victorialogs.rules.
     cmd = ["systemctl", "restart", "vexor-victorialogs"]
     try:
         r = subprocess.run(cmd, check=False, timeout=20, capture_output=True)
@@ -197,6 +255,9 @@ async def storage(_=Depends(require_viewer)) -> dict:
         "free_bytes": free,
         "oldest_log_ts": oldest,
         "retention_days": settings.retention_days,
+        "disk_mode": settings.disk_mode,
+        "disk_bytes": settings.disk_bytes,
+        "disk_percent": settings.disk_percent,
         "storage_path": str(STORAGE_DIR),
         "partitions": [{"path": str(STORAGE_DIR), "used_bytes": used_disk, "free_bytes": free}],
     }

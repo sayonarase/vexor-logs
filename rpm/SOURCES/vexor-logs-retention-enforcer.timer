@@ -1,0 +1,12 @@
+[Unit]
+Description=Vexor Logs - daily per-host retention enforcement
+Documentation=https://docs.victoriametrics.com/victorialogs/#how-to-delete-logs
+
+[Timer]
+# Run once a day, off-peak. Persistent so a missed run (host off) fires on boot.
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target
