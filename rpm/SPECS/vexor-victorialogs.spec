@@ -1,4 +1,4 @@
-%global vl_version 1.50.0
+%global vl_version 1.51.0
 %define _build_id_links none
 %global __os_install_post %{nil}
 %global debug_package %{nil}
@@ -7,7 +7,7 @@ AutoProv: no
 
 Name:           vexor-victorialogs
 Version:        %{vl_version}
-Release:        2%{?dist}
+Release:        1%{?dist}
 Summary:        VictoriaLogs daemon packaged for Vexor
 License:        ASL 2.0
 URL:            https://github.com/VictoriaMetrics/VictoriaLogs
@@ -70,6 +70,9 @@ systemctl try-restart vexor-victorialogs.service 2>/dev/null || :
 %dir /etc/vexor/logs
 
 %changelog
+* Sat Jun 20 2026 sayonarase <sayonarase@users.noreply.github.com> - 1.51.0-1
+- Update bundled VictoriaLogs to upstream v1.51.0.
+
 * Tue Nov 18 2026 sayonarase <sayonarase@users.noreply.github.com> - 1.50.0-2
 - Add /usr/bin/vexor-victorialogs launcher that reads /etc/vexor/logs.env
   (VEXOR_LOGS_RETENTION_DAYS, VEXOR_LOGS_LISTEN, VEXOR_LOGS_STORAGE).
