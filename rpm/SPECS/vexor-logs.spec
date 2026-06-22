@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        17%{?dist}
+Release:        18%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -157,6 +157,11 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Mon Jun 22 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-18
+- API: new GET /api/v1/logs/shippers endpoint returning every host shipping logs
+  with a last-seen freshness status (ok/stale/silent), powering the new Log
+  Shippers overview in the UI.
+
 * Sun Jun 21 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-17
 - Filter library: add 9 ready-made filters for Microsoft SQL Server 2014+ and
   Always On Availability Groups (high-severity errors, login failures,
