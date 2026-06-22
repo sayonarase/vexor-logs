@@ -55,6 +55,83 @@ def list_streams(_=Depends(require_viewer)) -> dict:
     return {"streams": _client.streams()}
 
 
+_WINDOW_RE = re.compile(r"^\d{1,4}[smhdw]$")
+
+
+def _parse_vl_time(value: Optional[str]) -> Optional[datetime]:
+    """Parse a VictoriaLogs _time string (RFC3339, may carry nanoseconds)."""
+    if not value or not isinstance(value, str):
+        return None
+    t = value.strip().replace("Z", "+00:00")
+    # fromisoformat only accepts 3 or 6 fractional digits -> trim nanoseconds.
+    m = re.match(r"^(.*\.\d{6})\d*(\+\d{2}:\d{2})$", t)
+    if m:
+        t = m.group(1) + m.group(2)
+    try:
+        dt = datetime.fromisoformat(t)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+@router.get("/shippers")
+def shippers(
+    window: str = Query("7d", description="discovery lookback window, e.g. 30m, 24h, 7d"),
+    ok_within: int = Query(600, ge=30, le=604800,
+                           description="max age (s) still considered fresh/OK"),
+    stale_within: int = Query(3600, ge=60, le=2592000,
+                              description="max age (s) considered stale before silent"),
+    _=Depends(require_viewer),
+) -> dict:
+    """List every host currently shipping logs, with a last-seen freshness status.
+
+    Derived from VictoriaLogs by aggregating max(_time) per `host` over the
+    lookback window. Status is ok / stale / silent based on the age of the most
+    recent log line for each host.
+    """
+    if not _WINDOW_RE.match(window):
+        raise HTTPException(400, "invalid window (expected e.g. 30m, 24h, 7d)")
+    if stale_within < ok_within:
+        stale_within = ok_within
+    q = f"_time:{window} * | stats by (host) count() as logs, max(_time) as last_seen"
+    try:
+        rows = _client.query(q, limit=10000)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
+    now = datetime.now(timezone.utc)
+    out: list[dict] = []
+    for r in rows:
+        host = (r.get("host") or "").strip()
+        if not host:
+            continue
+        try:
+            logs = int(r.get("logs") or 0)
+        except Exception:
+            logs = 0
+        last_raw = r.get("last_seen")
+        parsed = _parse_vl_time(last_raw)
+        if parsed is not None:
+            age = max(0, int((now - parsed).total_seconds()))
+            status = "ok" if age <= ok_within else ("stale" if age <= stale_within else "silent")
+        else:
+            age = None
+            status = "unknown"
+        out.append({
+            "host": host,
+            "logs": logs,
+            "last_seen": last_raw,
+            "age_seconds": age,
+            "status": status,
+        })
+    out.sort(key=lambda x: (x["age_seconds"] is None, x["age_seconds"] or 0))
+    counts = {"ok": 0, "stale": 0, "silent": 0, "unknown": 0}
+    for x in out:
+        counts[x["status"]] = counts.get(x["status"], 0) + 1
+    return {"shippers": out, "count": len(out), "window": window, "status_counts": counts}
+
+
 @router.get("/tail")
 async def tail(request: Request, query: str = Query(...), _=Depends(require_viewer)) -> StreamingResponse:
     async def gen():
