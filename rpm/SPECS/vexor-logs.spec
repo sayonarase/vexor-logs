@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        18%{?dist}
+Release:        19%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -157,6 +157,16 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Wed Jun 24 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-19
+- evaluator: fix direct log-alert notifications. The unbound-rule notify
+  path posted to a dead endpoint (http://127.0.0.1:8000/v1/notifications/
+  dispatch) with an outdated payload and no auth, so those notifications
+  silently failed. Now posts a DispatchEvent to
+  http://127.0.0.1:8080/api/v1/notify/dispatch-internal authenticated with
+  the /etc/vexor/notify-token file token, and direct dispatch is gated to
+  rules without a Naemon host_binding (bound rules notify via Naemon's
+  passive-check pipeline) to avoid double-notifying.
+
 * Mon Jun 22 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-18
 - API: new GET /api/v1/logs/shippers endpoint returning every host shipping logs
   with a last-seen freshness status (ok/stale/silent), powering the new Log

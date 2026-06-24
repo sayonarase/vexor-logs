@@ -2,7 +2,7 @@
 
 Polls VictoriaLogs for each enabled rule, counts matches in the configured
 window, and:
-  * POSTs to vexor-api's /v1/notifications/dispatch when the rule fires
+  * POSTs to vexor-api's /api/v1/notify/dispatch-internal when the rule fires
   * if the rule has ``host_binding`` set, submits a passive service check
     result to Naemon so the failure shows up in the monitoring console (and
     therefore in SLA reports, BSM and notifications).
@@ -37,8 +37,22 @@ log = logging.getLogger("vexor.logs.evaluator")
 
 POLL_INTERVAL = int(os.environ.get("VEXOR_LOG_ALERTS_INTERVAL", "30"))
 NOTIFY_URL    = os.environ.get(
-    "VEXOR_NOTIFY_URL", "http://127.0.0.1:8000/v1/notifications/dispatch"
+    "VEXOR_NOTIFY_URL",
+    "http://127.0.0.1:8080/api/v1/notify/dispatch-internal",
 )
+NOTIFY_TOKEN_FILE = os.environ.get("VEXOR_NOTIFY_TOKEN_FILE", "/etc/vexor/notify-token")
+
+
+def _notify_token() -> str:
+    """Shared file token for the internal dispatch endpoint (Naemon hook)."""
+    tok = os.environ.get("VEXOR_NOTIFY_TOKEN")
+    if tok:
+        return tok.strip()
+    try:
+        with open(NOTIFY_TOKEN_FILE) as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
 
 _SEV_TO_RC = {"info": 0, "ok": 0, "warning": 1, "critical": 2, "unknown": 3}
 
@@ -130,12 +144,11 @@ async def _evaluate_once(session_factory) -> None:
                             may_dispatch = True
                     if may_dispatch:
                         r.last_fired = now
-                if may_dispatch:
-                    await asyncio.to_thread(_dispatch, r, count, rows, mode, output)
 
                 # Always update naemon state when a binding exists so the
                 # service moves back to OK once the condition clears.
                 host = getattr(r, "host_binding", None)
+                passive_submitted = False
                 if host:
                     # Only submit for a valid, known Naemon host. A stale or
                     # garbage host_binding would otherwise make naemon reject the
@@ -152,6 +165,13 @@ async def _evaluate_once(session_factory) -> None:
                     else:
                         svc = service_name(slugify_rule_name(r.name))
                         submit_passive_result(valid_host, svc, rc, output)
+                        passive_submitted = True
+                # Direct notification only for rules with no bound Naemon
+                # service. Bound rules notify through Naemon's own
+                # notification pipeline (passive result above); dispatching
+                # here too would double-notify.
+                if may_dispatch and not passive_submitted:
+                    await asyncio.to_thread(_dispatch, r, count, rows, mode, output)
                 await db.commit()
             except Exception as e:
                 log.exception("rule %s failed: %s", r.name, e)
@@ -160,30 +180,40 @@ async def _evaluate_once(session_factory) -> None:
 
 def _dispatch(rule: LogAlertRule, count: int, sample_rows: list,
               mode: str = "match", output: str = "") -> None:
+    """Send a direct notification for an unbound log rule.
+
+    Posts a ``DispatchEvent`` to the internal notify endpoint, authenticated
+    with the shared file token. Bound rules are notified through Naemon's own
+    pipeline (passive result) and never reach this path.
+    """
     if mode == "absence":
-        summary = (f"[{rule.severity}] log-freshness rule '{rule.name}' - only "
-                   f"{count} log line(s) received (source may be down)")
+        summary = (f"log-freshness rule '{rule.name}' - only {count} log "
+                   f"line(s) received (source may be down)")
     else:
-        summary = (f"[{rule.severity}] log rule '{rule.name}' matched "
-                   f"{count} times")
+        summary = f"log rule '{rule.name}' matched {count} times"
+    sample_lines = []
+    for row in sample_rows[:3]:
+        if isinstance(row, dict):
+            sample_lines.append(str(row.get("_msg") or row.get("message") or row))
+        else:
+            sample_lines.append(str(row))
     payload = {
-        "source":   "vexor-logs",
-        "rule":     rule.name,
-        "mode":     mode,
-        "severity": rule.severity,
-        "summary":  summary,
-        "output":   output,
-        "query":    rule.query,
-        "count":    count,
-        "to":       rule.notify_to,
-        "host":     getattr(rule, "host_binding", None),
-        "sample":   sample_rows[:3],
+        "host":        getattr(rule, "host_binding", None) or "vexor-logs",
+        "service":     f"log:{rule.name}",
+        "severity":    (rule.severity or "warning").upper(),
+        "output":      output or summary,
+        "long_output": "\n".join(sample_lines),
+        "attempt":     1,
     }
+    headers = {"Content-Type": "application/json"}
+    token = _notify_token()
+    if token:
+        headers["X-Internal-Token"] = token
     try:
         req = urllib.request.Request(
             NOTIFY_URL, method="POST",
             data=json.dumps(payload, default=str).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
         )
         urllib.request.urlopen(req, timeout=10)  # noqa: S310
     except Exception as e:
