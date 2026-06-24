@@ -16,6 +16,7 @@ Mounted at startup by vexor-api's plugin loader. Exposes:
   * GET  /api/v1/log-checks/catalog   — log-check presets (filters + dead-man)
   * POST /api/v1/log-checks/for-host  — apply log checks to a host
   * GET  /api/v1/modules              — module discovery (advertises "logs")
+  * POST /api/v1/logs/ai-analyze      — LLM-assisted triage of a log query
 """
 from .logs_router import router as logs_router                       # noqa: F401
 from .log_alerts_router import router as log_alerts_router           # noqa: F401
@@ -26,6 +27,7 @@ from .settings_router import router as settings_router               # noqa: F40
 from .saved_searches_router import router as saved_searches_router   # noqa: F401
 from .filter_library_router import router as filter_library_router   # noqa: F401
 from .shipper_router import router as shipper_router                 # noqa: F401
+from .log_ai_router import router as log_ai_router                   # noqa: F401
 
 # vexor-api's plugin loader looks for a module-level `routers` list.
 routers = [
@@ -38,6 +40,7 @@ routers = [
     saved_searches_router,
     filter_library_router,
     shipper_router,
+    log_ai_router,
 ]
 
 
