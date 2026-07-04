@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        23%{?dist}
+Release:        24%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -160,6 +160,12 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-24
+- Fix install-windows-agent.ps1 Vector config generation: parenthesise the
+  ForEach-Object pipeline before -join so PowerShell no longer tries to bind
+  the join result to ForEach-Object -RemainingScripts (install aborted with
+  "Cannot bind parameter RemainingScripts" right after the Vector download).
+
 * Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-23
 - Add log anomaly detection: baseline (robust z-score volume/rate), template
   novelty (dependency-free miner) and LLM watch monitors, evaluated by the
