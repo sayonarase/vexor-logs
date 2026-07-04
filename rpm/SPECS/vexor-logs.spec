@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        22%{?dist}
+Release:        23%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -28,6 +28,7 @@ Source13:       003_log_checks.sql
 Source14:       004_log_retention_overrides.sql
 Source15:       005_log_alert_events.sql
 Source16:       vexor-logs-retention-enforcer
+Source19:       006_log_anomaly.sql
 Source17:       vexor-logs-retention-enforcer.service
 Source18:       vexor-logs-retention-enforcer.timer
 
@@ -83,6 +84,7 @@ install -Dpm 0644 %{SOURCE11} %{buildroot}/usr/share/vexor-logs/migrations/002_p
 install -Dpm 0644 %{SOURCE13} %{buildroot}/usr/share/vexor-logs/migrations/003_log_checks.sql
 install -Dpm 0644 %{SOURCE14} %{buildroot}/usr/share/vexor-logs/migrations/004_log_retention_overrides.sql
 install -Dpm 0644 %{SOURCE15} %{buildroot}/usr/share/vexor-logs/migrations/005_log_alert_events.sql
+install -Dpm 0644 %{SOURCE19} %{buildroot}/usr/share/vexor-logs/migrations/006_log_anomaly.sql
 install -Dpm 0755 %{SOURCE16} %{buildroot}/usr/bin/vexor-logs-retention-enforcer
 install -Dpm 0644 %{SOURCE17} %{buildroot}/usr/lib/systemd/system/vexor-logs-retention-enforcer.service
 install -Dpm 0644 %{SOURCE18} %{buildroot}/usr/lib/systemd/system/vexor-logs-retention-enforcer.timer
@@ -151,12 +153,19 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/migrations/003_log_checks.sql
 /usr/share/vexor-logs/migrations/004_log_retention_overrides.sql
 /usr/share/vexor-logs/migrations/005_log_alert_events.sql
+/usr/share/vexor-logs/migrations/006_log_anomaly.sql
 /usr/bin/vexor-logs-retention-enforcer
 /usr/lib/systemd/system/vexor-logs-retention-enforcer.service
 /usr/lib/systemd/system/vexor-logs-retention-enforcer.timer
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-23
+- Add log anomaly detection: baseline (robust z-score volume/rate), template
+  novelty (dependency-free miner) and LLM watch monitors, evaluated by the
+  existing alert evaluator; new /api/v1/log-anomalies API + Sigma-inspired
+  preset catalog; results emit passive Naemon results when host-bound.
+
 * Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-22
 - Make raw install-script download public (no bearer token) so fresh hosts
   can fetch install-windows-agent.ps1; listing endpoint stays authed.

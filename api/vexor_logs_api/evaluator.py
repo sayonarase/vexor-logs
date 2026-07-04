@@ -229,6 +229,11 @@ async def _amain() -> None:
             await _evaluate_once(async_session)
         except Exception as e:
             log.exception("evaluator iteration failed: %s", e)
+        try:
+            from . import anomaly
+            await anomaly.evaluate_all(async_session)
+        except Exception as e:
+            log.exception("anomaly iteration failed: %s", e)
         await asyncio.sleep(POLL_INTERVAL)
 
 

@@ -28,6 +28,7 @@ from .saved_searches_router import router as saved_searches_router   # noqa: F40
 from .filter_library_router import router as filter_library_router   # noqa: F401
 from .shipper_router import router as shipper_router                 # noqa: F401
 from .log_ai_router import router as log_ai_router                   # noqa: F401
+from .anomaly_router import router as anomaly_router                 # noqa: F401
 
 # vexor-api's plugin loader looks for a module-level `routers` list.
 routers = [
@@ -41,6 +42,7 @@ routers = [
     filter_library_router,
     shipper_router,
     log_ai_router,
+    anomaly_router,
 ]
 
 
