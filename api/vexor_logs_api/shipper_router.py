@@ -74,6 +74,28 @@ router = APIRouter(prefix="/api/v1/logs", tags=["logs-shipper"])
 
 INSTALL_SCRIPT_DIR = Path("/opt/vexor/api/plugins/logs/install-scripts")
 
+_INGEST_ENV = Path("/etc/vexor/logs-ingest.env")
+
+
+def _ingest_token() -> str:
+    """Return the log ingest token (matches the nginx `Bearer <token>` map).
+
+    Shippers must send `Authorization: Bearer <token>` to /api/v1/logs/push or
+    nginx returns 401. The token lives in VEXOR_LOGS_INGEST_TOKEN (env) or the
+    root:vexor 0640 file /etc/vexor/logs-ingest.env, readable by the api user.
+    """
+    tok = os.environ.get("VEXOR_LOGS_INGEST_TOKEN", "").strip()
+    if tok:
+        return tok
+    try:
+        for ln in _INGEST_ENV.read_text().splitlines():
+            ln = ln.strip()
+            if ln.startswith("VEXOR_LOGS_INGEST_TOKEN="):
+                return ln.split("=", 1)[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
+    return ""
+
 
 class DeployIn(BaseModel):
     host: str
@@ -182,10 +204,10 @@ async def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
                 "Run the following PowerShell on the Windows host:"
             ),
             "command": (
-                f"iwr {url}/api/v1/logs/install-scripts/install-windows-agent.ps1 "
-                f"-OutFile $env:TEMP\\vexor-vector.ps1; "
-                f"powershell -ExecutionPolicy Bypass -File $env:TEMP\\vexor-vector.ps1 "
-                f"-VexorUrl {url} -Token {shlex.quote(body.token) if body.token else "<token>"} "
+                f'curl.exe -k -o "$env:TEMP\\vexor-vector.ps1" '
+                f"{url}/api/v1/logs/install-scripts/install-windows-agent.ps1; "
+                f'powershell -ExecutionPolicy Bypass -File "$env:TEMP\\vexor-vector.ps1" '
+                f'-VexorUrl {url} -Token "{body.token or _ingest_token() or "<TOKEN>"}" '
                 f"-Agent {body.agent}"
             ),
             "script_preview": content[:2000],
@@ -303,6 +325,15 @@ async def deploy(body: DeployIn, _=Depends(require_admin)) -> dict:
             except Exception: pass
 
 from fastapi.responses import PlainTextResponse, Response
+
+
+@router.get("/ingest-token", dependencies=[Depends(require_admin)])
+def get_ingest_token() -> dict:
+    """Admin-only: reveal the current log ingest token so it can be shown in the
+    GUI and injected into shipper install commands. Shippers authenticate to
+    /api/v1/logs/push with `Authorization: Bearer <token>`."""
+    tok = _ingest_token()
+    return {"configured": bool(tok), "token": tok, "scheme": "Bearer"}
 
 _ALLOWED_SCRIPTS = {
     "install-linux-agent.sh":              ("text/x-shellscript", "linux"),

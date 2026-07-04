@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        20%{?dist}
+Release:        21%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -157,6 +157,13 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jul 04 2026 Vexor <build@vexormon.com> - 0.1.0-21
+- Log shippers: new admin-only GET /api/v1/logs/ingest-token so the GUI can
+  show the ingest token and embed it in the install commands (shippers must
+  send Authorization: Bearer <token> to /api/v1/logs/push or get 401).
+- WinRM deploy command now uses `curl.exe -k` (works against a self-signed
+  Vexor cert on Windows PowerShell 5.1) instead of Invoke-WebRequest, and no
+  longer contains a stray backslash line-continuation that broke when pasted.
 * Wed Jun 24 2026 Vexor <release@sayonara.dyndns.org> - 0.1.0-20
 - New endpoint POST /api/v1/logs/ai-analyze: AI-assisted SRE triage of a log
   query using the system-wide LLM provider configured in vexor-api (operator+).
