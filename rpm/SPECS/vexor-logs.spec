@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        24%{?dist}
+Release:        25%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -160,6 +160,12 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-25
+- Make Windows installer NSSM service registration robust: guard stop/remove
+  with Get-Service and relax ErrorActionPreference around the nssm section so a
+  first install no longer aborts with a NativeCommandError (nssm cannot open a
+  not-yet-existing service); verify the service is Running afterwards.
+
 * Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-24
 - Fix install-windows-agent.ps1 Vector config generation: parenthesise the
   ForEach-Object pipeline before -join so PowerShell no longer tries to bind

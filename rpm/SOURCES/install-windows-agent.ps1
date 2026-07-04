@@ -107,13 +107,36 @@ Write-VectorConfig
 
 # Register as Windows service via NSSM
 $svc = "vexor-vector"
-& $nssm stop $svc 2>$null | Out-Null
-& $nssm remove $svc confirm 2>$null | Out-Null
-& $nssm install $svc $exe "--config" (Join-Path $ConfDir "vector.toml") | Out-Null
-& $nssm set $svc Start SERVICE_AUTO_START | Out-Null
-& $nssm set $svc AppStdout (Join-Path $DataDir "vector.log") | Out-Null
-& $nssm set $svc AppStderr (Join-Path $DataDir "vector.err") | Out-Null
-& $nssm start $svc | Out-Null
+
+# NSSM writes to stderr for benign conditions (e.g. stopping/removing a service
+# that does not exist yet). Under $ErrorActionPreference='Stop', PowerShell 5.1
+# turns that native stderr into a terminating NativeCommandError even with
+# 2>$null, so relax error handling for the service-registration section and
+# guard the pre-clean with Get-Service.
+$svcEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+  if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
+    & $nssm stop $svc 2>&1 | Out-Null
+    & $nssm remove $svc confirm 2>&1 | Out-Null
+    Start-Sleep -Milliseconds 500
+  }
+  & $nssm install $svc $exe "--config" (Join-Path $ConfDir "vector.toml") 2>&1 | Out-Null
+  & $nssm set $svc Start SERVICE_AUTO_START 2>&1 | Out-Null
+  & $nssm set $svc AppStdout (Join-Path $DataDir "vector.log") 2>&1 | Out-Null
+  & $nssm set $svc AppStderr (Join-Path $DataDir "vector.err") 2>&1 | Out-Null
+  & $nssm start $svc 2>&1 | Out-Null
+} finally {
+  $ErrorActionPreference = $svcEap
+}
+
+# Verify the service was created and is running.
+Start-Sleep -Seconds 2
+$s = Get-Service -Name $svc -ErrorAction SilentlyContinue
+if (-not $s) { throw "vexor-vector service was not created (nssm install failed)." }
+if ($s.Status -ne "Running") {
+  Write-Warning "vexor-vector service created but not running yet (status: $($s.Status)). Check $DataDir\vector.err"
+}
 
 Write-Host "OK: vexor-vector service installed and started."
 Write-Host "Logs: $DataDir\vector.log"
