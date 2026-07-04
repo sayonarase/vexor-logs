@@ -356,7 +356,7 @@ def list_install_scripts() -> dict:
         })
     return {"scripts": out}
 
-@router.get("/install-scripts/{name}", dependencies=[Depends(require_viewer)])
+@router.get("/install-scripts/{name}")
 def serve_install_script(name: str):
     meta = _ALLOWED_SCRIPTS.get(name)
     if not meta:

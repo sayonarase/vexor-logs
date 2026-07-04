@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        21%{?dist}
+Release:        22%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -157,6 +157,10 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-22
+- Make raw install-script download public (no bearer token) so fresh hosts
+  can fetch install-windows-agent.ps1; listing endpoint stays authed.
+
 * Sat Jul 04 2026 Vexor <build@vexormon.com> - 0.1.0-21
 - Log shippers: new admin-only GET /api/v1/logs/ingest-token so the GUI can
   show the ingest token and embed it in the install commands (shippers must
