@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        28%{?dist}
+Release:        29%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -160,6 +160,14 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-29
+- Interactive Windows installer: invoke the downloaded installer in-process via
+  splatting instead of powershell -File, so file paths containing spaces (e.g.
+  C:\Program Files\Microsoft SQL Server\...) no longer cause a positional
+  parameter error.
+- Installer now splits comma-separated event-channel entries and trims spaces,
+  so entering "Application,System,Security" on one line works.
+
 * Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-28
 - Windows installer: add -FileEncoding parameter (interactive installer prompts
   for it) that sets Vector encoding.charset on file sources, so non-UTF-8 logs

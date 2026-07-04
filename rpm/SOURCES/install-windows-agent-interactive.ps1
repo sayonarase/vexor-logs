@@ -54,4 +54,12 @@ Invoke-WebRequest -Uri "$base/api/v1/logs/install-scripts/install-windows-agent.
 
 Write-Host ""
 Write-Host "=> install-windows-agent.ps1 -VexorUrl $VexorUrl -Agent $Agent -Logs $($Logs -join ',')"
-& powershell -ExecutionPolicy Bypass -File $tmp -VexorUrl $VexorUrl -Token $Token -Agent $Agent -Logs $Logs -FileEncoding $FileEncoding -HostName $HostName
+$installArgs = @{
+  VexorUrl     = $VexorUrl
+  Token        = $Token
+  Agent        = $Agent
+  Logs         = $Logs
+  FileEncoding = $FileEncoding
+  HostName     = $HostName
+}
+& $tmp @installArgs

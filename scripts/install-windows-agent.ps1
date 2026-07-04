@@ -84,7 +84,11 @@ function Write-VectorConfig {
   $channels = @()
   $files = @()
   foreach ($l in $Logs) {
-    if ($l -match '[\\/*?]' -or $l -match '^[A-Za-z]:') { $files += $l } else { $channels += $l }
+    if ($l -match '[\\/*?]' -or $l -match '^[A-Za-z]:') {
+      $files += $l
+    } else {
+      foreach ($c in ($l -split ',')) { if ($c.Trim()) { $channels += $c.Trim() } }
+    }
   }
   $srcInputs = @()
   if ($channels.Count -gt 0) {
