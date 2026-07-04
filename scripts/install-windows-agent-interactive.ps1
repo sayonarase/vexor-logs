@@ -22,21 +22,40 @@ if ([string]::IsNullOrWhiteSpace($Agent)) { $Agent = "vector" }
 
 $FileEncoding = Read-Host "Charset for file logs (UTF-16LE for SQL Server ERRORLOG, windows-1252 for legacy ANSI; blank = UTF-8)"
 
+$Logs = @()
+
 Write-Host ""
-Write-Host "Log paths / event channels to ship."
-Write-Host "  - Files: full glob, e.g. C:\inetpub\logs\LogFiles\**\*.log"
-Write-Host "  - Event channels: Application | System | Security | Setup | ForwardedEvents"
+$stdAns = Read-Host "Ship the standard Windows event logs (Application, System, Security)? [Y/n]"
+if ($stdAns -notmatch '^\s*(n|no)\s*$') {
+  $Logs += @("Application","System","Security")
+  Write-Host "  + Application, System, Security"
+}
+
+Write-Host ""
+Write-Host "Add more log sources? For each entry you can point to:"
+Write-Host "  - a log file:       C:\MyApp\logs\app.log"
+Write-Host "  - a folder:         C:\inetpub\logs\LogFiles      (all files under it, recursively)"
+Write-Host "  - a glob:           C:\logs\**\*.log"
+Write-Host "  - an event channel: Setup | ForwardedEvents | ..."
 Write-Host "  Press Enter on an empty line to finish."
-Write-Host "  Default if you skip: Application,System,Security"
 Write-Host ""
 
-$Logs = @()
 while ($true) {
-  $p = Read-Host "  path/channel"
+  $p = Read-Host "  add log (blank = done)"
   if ([string]::IsNullOrWhiteSpace($p)) { break }
+  $p = $p.Trim()
+  # If the entry is an existing directory, expand it to a recursive file glob.
+  if (Test-Path -LiteralPath $p -PathType Container) {
+    $p = (Join-Path $p "**\*")
+    Write-Host "  (folder -> $p)"
+  }
   $Logs += $p
 }
-if ($Logs.Count -eq 0) { $Logs = @("Application","System","Security") }
+
+if ($Logs.Count -eq 0) {
+  Write-Host "No sources selected; defaulting to Application, System, Security."
+  $Logs = @("Application","System","Security")
+}
 
 # Download default installer from this Vexor server and re-invoke
 $tmp = Join-Path $env:TEMP "install-windows-agent.ps1"

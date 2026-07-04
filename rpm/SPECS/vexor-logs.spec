@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        29%{?dist}
+Release:        30%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -160,6 +160,12 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-30
+- Interactive Windows installer: friendlier log selection - first a yes/no for
+  the standard event logs (Application/System/Security), then a repeat prompt to
+  add more sources (file, glob, event channel, or a folder which is auto-expanded
+  to a recursive file glob).
+
 * Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-29
 - Interactive Windows installer: invoke the downloaded installer in-process via
   splatting instead of powershell -File, so file paths containing spaces (e.g.
