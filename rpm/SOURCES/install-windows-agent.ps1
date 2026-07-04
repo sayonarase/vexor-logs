@@ -14,6 +14,12 @@
 .PARAMETER Logs
   One or more paths/log channels. Defaults to Application,System,Security event logs.
 
+.PARAMETER FileEncoding
+  Optional character set for file log sources, passed through to Vector's
+  encoding.charset (any encoding_rs label). Common on Windows: UTF-16LE (SQL
+  Server ERRORLOG, PowerShell transcripts) or windows-1252 (legacy ANSI logs).
+  Applies to all file globs. Blank = UTF-8 (default).
+
 .EXAMPLE
   install-windows-agent.ps1 -VexorUrl https://vexor.example.com -Token abc -Logs Application,Security
 #>
@@ -23,6 +29,7 @@ param(
   [string]$Token = "",
   [ValidateSet("vector","fluentbit")][string]$Agent = "vector",
   [string[]]$Logs = @("Application","System","Security"),
+  [string]$FileEncoding = "",
   [string]$HostName = ""
 )
 
@@ -92,6 +99,7 @@ function Write-VectorConfig {
     $toml += 'type = "file"'
     $toml += 'include = [' + (($files | ForEach-Object { '"' + ($_ -replace '\\','/') + '"' }) -join ", ") + ']'
     $toml += 'read_from = "beginning"'
+    if ($FileEncoding) { $toml += 'encoding.charset = "' + $FileEncoding + '"' }
     $toml += ''
     $srcInputs += 'files'
   }

@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        27%{?dist}
+Release:        28%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -160,6 +160,12 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-28
+- Windows installer: add -FileEncoding parameter (interactive installer prompts
+  for it) that sets Vector encoding.charset on file sources, so non-UTF-8 logs
+  such as SQL Server ERRORLOG (UTF-16LE) or legacy ANSI (windows-1252) ship
+  without mojibake. Any encoding_rs label is accepted; blank keeps UTF-8.
+
 * Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-27
 - Windows installer now supports shipping log files/globs in addition to event
   channels: any -Logs value containing a path separator, wildcard or drive

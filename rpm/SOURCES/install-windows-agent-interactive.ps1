@@ -20,6 +20,8 @@ $HostName = Read-Host "Host name as Vexor knows it (blank = this computer name)"
 $Agent = Read-Host "Agent [vector / fluentbit] (default: vector)"
 if ([string]::IsNullOrWhiteSpace($Agent)) { $Agent = "vector" }
 
+$FileEncoding = Read-Host "Charset for file logs (UTF-16LE for SQL Server ERRORLOG, windows-1252 for legacy ANSI; blank = UTF-8)"
+
 Write-Host ""
 Write-Host "Log paths / event channels to ship."
 Write-Host "  - Files: full glob, e.g. C:\inetpub\logs\LogFiles\**\*.log"
@@ -52,4 +54,4 @@ Invoke-WebRequest -Uri "$base/api/v1/logs/install-scripts/install-windows-agent.
 
 Write-Host ""
 Write-Host "=> install-windows-agent.ps1 -VexorUrl $VexorUrl -Agent $Agent -Logs $($Logs -join ',')"
-& powershell -ExecutionPolicy Bypass -File $tmp -VexorUrl $VexorUrl -Token $Token -Agent $Agent -Logs $Logs -HostName $HostName
+& powershell -ExecutionPolicy Bypass -File $tmp -VexorUrl $VexorUrl -Token $Token -Agent $Agent -Logs $Logs -FileEncoding $FileEncoding -HostName $HostName
