@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        26%{?dist}
+Release:        27%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -160,6 +160,12 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-27
+- Windows installer now supports shipping log files/globs in addition to event
+  channels: any -Logs value containing a path separator, wildcard or drive
+  letter becomes a Vector file source (include glob); plain names remain event
+  channels. File events get channel set to the source path.
+
 * Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-26
 - Fix Windows Vector config: drop the unsupported subscription_name field from
   the windows_event_log source so Vector can load the config and start shipping.

@@ -71,14 +71,34 @@ function Write-VectorConfig {
   $toml = @()
   $toml += 'data_dir = "C:/ProgramData/Vexor/vector"'
   $toml += ''
-  $toml += '[sources.winlog]'
-  $toml += 'type = "windows_event_log"'
-  $toml += 'channels = [' + (($Logs | ForEach-Object { '"' + $_ + '"' }) -join ", ") + ']'
-  $toml += ''
+  # Split requested targets into Windows event channels and file globs.
+  # A target is treated as a file path/glob when it contains a path separator,
+  # a wildcard, or a drive-letter prefix; otherwise it is an event channel.
+  $channels = @()
+  $files = @()
+  foreach ($l in $Logs) {
+    if ($l -match '[\\/*?]' -or $l -match '^[A-Za-z]:') { $files += $l } else { $channels += $l }
+  }
+  $srcInputs = @()
+  if ($channels.Count -gt 0) {
+    $toml += '[sources.winlog]'
+    $toml += 'type = "windows_event_log"'
+    $toml += 'channels = [' + (($channels | ForEach-Object { '"' + $_ + '"' }) -join ", ") + ']'
+    $toml += ''
+    $srcInputs += 'winlog'
+  }
+  if ($files.Count -gt 0) {
+    $toml += '[sources.files]'
+    $toml += 'type = "file"'
+    $toml += 'include = [' + (($files | ForEach-Object { '"' + ($_ -replace '\\','/') + '"' }) -join ", ") + ']'
+    $toml += 'read_from = "beginning"'
+    $toml += ''
+    $srcInputs += 'files'
+  }
   $toml += '[transforms.add_host]'
   $toml += 'type    = "remap"'
-  $toml += 'inputs  = ["winlog"]'
-  $vrl = ".host = `"$EffectiveHost`"`nif !exists(._msg) {`n  ._msg = to_string(.message) ?? to_string(.Message) ?? to_string(.RenderingInfo.Message) ?? encode_json(.)`n}"
+  $toml += 'inputs  = [' + (($srcInputs | ForEach-Object { '"' + $_ + '"' }) -join ", ") + ']'
+  $vrl = ".host = `"$EffectiveHost`"`nif !exists(._msg) {`n  ._msg = to_string(.message) ?? to_string(.Message) ?? to_string(.RenderingInfo.Message) ?? encode_json(.)`n}`nif !exists(.channel) {`n  .channel = to_string(.file) ?? `"file`"`n}"
   $toml += "source  = '''`n$vrl`n'''"
   $toml += ''
   $toml += '[sinks.vexor]'
