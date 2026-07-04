@@ -73,7 +73,6 @@ function Write-VectorConfig {
   $toml += ''
   $toml += '[sources.winlog]'
   $toml += 'type = "windows_event_log"'
-  $toml += 'subscription_name = "Vexor"'
   $toml += 'channels = [' + (($Logs | ForEach-Object { '"' + $_ + '"' }) -join ", ") + ']'
   $toml += ''
   $toml += '[transforms.add_host]'

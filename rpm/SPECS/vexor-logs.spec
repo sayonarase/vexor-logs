@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        25%{?dist}
+Release:        26%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -160,6 +160,10 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-26
+- Fix Windows Vector config: drop the unsupported subscription_name field from
+  the windows_event_log source so Vector can load the config and start shipping.
+
 * Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-25
 - Make Windows installer NSSM service registration robust: guard stop/remove
   with Get-Service and relax ErrorActionPreference around the nssm section so a
