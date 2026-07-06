@@ -234,6 +234,16 @@ async def _amain() -> None:
             await anomaly.evaluate_all(async_session)
         except Exception as e:
             log.exception("anomaly iteration failed: %s", e)
+        try:
+            from . import metrics_sampler
+            await metrics_sampler.sample_due(async_session)
+        except Exception as e:
+            log.exception("metric sampling failed: %s", e)
+        try:
+            from . import reports_scheduler
+            await reports_scheduler.run_due(async_session)
+        except Exception as e:
+            log.exception("report scheduling failed: %s", e)
         await asyncio.sleep(POLL_INTERVAL)
 
 

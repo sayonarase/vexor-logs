@@ -471,3 +471,55 @@ def heatmap(
     return {"grid": grid, "days": days,
             "start": start_dt.isoformat(), "end": end_dt.isoformat()}
 
+
+
+def _ctx_quote(v: str) -> str:
+    return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+@router.get("/context")
+def context(
+    time: str = Query(..., description="anchor _time (RFC3339)"),
+    host: Optional[str] = Query(None),
+    service: Optional[str] = Query(None),
+    before: int = Query(10, ge=0, le=200),
+    after: int = Query(10, ge=0, le=200),
+    _=Depends(require_viewer),
+) -> dict:
+    """Return the log lines immediately before/after an anchor line.
+
+    Scoped to the same host (and optionally service/stream) so the surrounding
+    context is coherent. Powers the "show context" action in the search view.
+    """
+    anchor = _parse_vl_time(time)
+    if anchor is None:
+        raise HTTPException(400, f"invalid time: {time!r}")
+    scope_parts = []
+    if host:
+        scope_parts.append(f"host:={_ctx_quote(host)}")
+    if service:
+        scope_parts.append(f"service:={_ctx_quote(service)}")
+    scope = " ".join(scope_parts) or "*"
+    lo = (anchor - timedelta(days=3)).isoformat()
+    hi = (anchor + timedelta(days=3)).isoformat()
+    anchor_iso = anchor.isoformat()
+    try:
+        qb = f"{scope} | sort by (_time) desc | limit {before + 1}"
+        rows_before = _client.query(qb, limit=before + 1, start=lo, end=anchor_iso)
+        rows_before.reverse()  # ascending, anchor is last
+        qa = f"{scope} | sort by (_time) asc | limit {after + 1}"
+        rows_after = _client.query(qa, limit=after + 1, start=anchor_iso, end=hi)
+    except Exception as e:
+        raise HTTPException(502, f"victorialogs: {e}")
+    anchor_row = None
+    if rows_before:
+        anchor_row = rows_before[-1]
+        rows_before = rows_before[:-1]
+    elif rows_after:
+        anchor_row = rows_after[0]
+    if rows_after and anchor_row is not None:
+        # after query is anchor-inclusive; drop the shared anchor row.
+        if rows_after[0].get("_time") == anchor_row.get("_time") \
+                and rows_after[0].get("_msg") == anchor_row.get("_msg"):
+            rows_after = rows_after[1:]
+    return {"before": rows_before, "anchor": anchor_row, "after": rows_after}

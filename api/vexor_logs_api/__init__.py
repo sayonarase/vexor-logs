@@ -5,11 +5,16 @@ Mounted at startup by vexor-api's plugin loader. Exposes:
   * GET  /api/v1/logs/tail            — SSE live-tail
   * GET  /api/v1/logs/streams         — label/stream discovery
   * GET  /api/v1/logs/histogram       — bucketed match counts
+  * GET  /api/v1/logs/context         — surrounding lines around a hit (F7)
   * GET  /api/v1/logs/export          — CSV / NDJSON download
   * POST /api/v1/logs/test-query      — preview a query before saving
   * GET/PUT /api/v1/logs/settings     — retention + env config
   * GET  /api/v1/logs/storage         — disk usage + oldest log
   * CRUD /api/v1/logs/saved-searches  — saved searches
+  * CRUD /api/v1/logs/parse-rules     — field-extraction rules (F2)
+  * GET  /api/v1/logs/geoip           — GeoIP country enrichment (F4)
+  * CRUD /api/v1/logs/metrics         — log-derived metrics + series (F3)
+  * CRUD /api/v1/logs/reports         — scheduled log digests (F8)
   * GET  /api/v1/logs/filter-library  — curated starter filters
   * POST /api/v1/logs/deploy-shipper  — remote install of vector / fluent-bit
   * CRUD /api/v1/log-alerts           — alert rule management
@@ -29,6 +34,10 @@ from .filter_library_router import router as filter_library_router   # noqa: F40
 from .shipper_router import router as shipper_router                 # noqa: F401
 from .log_ai_router import router as log_ai_router                   # noqa: F401
 from .anomaly_router import router as anomaly_router                 # noqa: F401
+from .parse_rules_router import router as parse_rules_router         # noqa: F401
+from .enrich_router import router as enrich_router                   # noqa: F401
+from .metrics_router import router as metrics_router                 # noqa: F401
+from .reports_router import router as reports_router                 # noqa: F401
 
 # vexor-api's plugin loader looks for a module-level `routers` list.
 routers = [
@@ -43,6 +52,10 @@ routers = [
     shipper_router,
     log_ai_router,
     anomaly_router,
+    parse_rules_router,
+    enrich_router,
+    metrics_router,
+    reports_router,
 ]
 
 

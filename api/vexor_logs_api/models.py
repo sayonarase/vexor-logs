@@ -149,3 +149,106 @@ class LogAnomalyTemplate(Base):
     hits       = Column(Integer, nullable=False, default=1)
     first_seen = Column(DateTime(timezone=True), server_default=func.now())
     last_seen  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Log field-extraction / parse rules (migration 007, feature F2)
+# ---------------------------------------------------------------------------
+class LogParseRule(Base):
+    """User-defined field extraction applied to search results on demand.
+
+    A parse rule turns unstructured ``_msg`` text into named fields using a
+    VictoriaLogs ``extract`` pattern (``pattern_type='pattern'``, e.g.
+    ``ip=<ip> status=<status>``) or an ``extract_regexp`` regular expression
+    (``pattern_type='regexp'`` with named groups). Rules are expanded into
+    LogsQL pipes by the ``/logs/parse-rules/expand`` endpoint and appended to
+    the base query in the search view.
+    """
+    __tablename__ = 'log_parse_rules'
+    id           = Column(Integer, primary_key=True)
+    name         = Column(String(255), nullable=False, unique=True)
+    source_field = Column(String(64), nullable=False, default='_msg')
+    pattern      = Column(Text, nullable=False)
+    pattern_type = Column(String(16), nullable=False, default='pattern')  # pattern|regexp
+    enabled      = Column(Boolean, nullable=False, default=True)
+    sort_order   = Column(Integer, nullable=False, default=100)
+    note         = Column(String(255), nullable=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at   = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Log-derived metrics (migration 008, feature F3)
+# ---------------------------------------------------------------------------
+class LogMetric(Base):
+    """A graphable metric derived from a periodically-evaluated log query.
+
+    Every ``window_sec`` the evaluator counts matches of ``query`` in the
+    trailing window (optionally grouped by ``group_by``) and stores a sample.
+    ``agg='rate'`` divides the count by the window length (per-second). When
+    ``host_binding`` is set the latest value is also submitted to Naemon as a
+    passive service check with perfdata, so it graphs and can alert via
+    ``warn_threshold`` / ``crit_threshold``.
+    """
+    __tablename__ = 'log_metrics'
+    id             = Column(Integer, primary_key=True)
+    name           = Column(String(255), nullable=False, unique=True)
+    query          = Column(Text, nullable=False, default='*')
+    agg            = Column(String(16), nullable=False, default='count')   # count|rate
+    window_sec     = Column(Integer, nullable=False, default=300)
+    group_by       = Column(String(64), nullable=True)
+    unit           = Column(String(32), nullable=True)
+    enabled        = Column(Boolean, nullable=False, default=True)
+    warn_threshold = Column(Float, nullable=True)
+    crit_threshold = Column(Float, nullable=True)
+    severity       = Column(String(32), nullable=False, default='warning')
+    host_binding   = Column(String(255), nullable=True)
+    last_value     = Column(Float, nullable=True)
+    last_state     = Column(Integer, nullable=True)
+    last_run       = Column(DateTime(timezone=True), nullable=True)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at     = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class LogMetricSample(Base):
+    """Time-series samples produced by a LogMetric (migration 008)."""
+    __tablename__ = 'log_metric_samples'
+    id         = Column(Integer, primary_key=True)
+    metric_id  = Column(Integer, nullable=False, index=True)
+    ts         = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    host       = Column(String(255), nullable=True, index=True)
+    value      = Column(Float, nullable=False, default=0)
+
+
+# ---------------------------------------------------------------------------
+# Scheduled log digests / reports (migration 009, feature F8)
+# ---------------------------------------------------------------------------
+class LogReport(Base):
+    """A scheduled digest summarising a log query over a window.
+
+    On its schedule the evaluator composes a summary (total volume, top values
+    of ``top_field``, error count) and delivers it as a notification through
+    vexor-api's internal dispatch endpoint (routed by the operator's
+    notification policies). ``schedule_kind`` is ``daily`` / ``weekly`` /
+    ``interval``.
+    """
+    __tablename__ = 'log_reports'
+    id             = Column(Integer, primary_key=True)
+    name           = Column(String(255), nullable=False, unique=True)
+    enabled        = Column(Boolean, nullable=False, default=True)
+    query          = Column(Text, nullable=False, default='*')
+    window_sec     = Column(Integer, nullable=False, default=86400)
+    schedule_kind  = Column(String(16), nullable=False, default='daily')  # daily|weekly|interval
+    at_hour        = Column(Integer, nullable=False, default=7)
+    at_minute      = Column(Integer, nullable=False, default=0)
+    dow            = Column(Integer, nullable=True)                       # 0=Mon..6=Sun (weekly)
+    interval_hours = Column(Integer, nullable=True)
+    top_field      = Column(String(64), nullable=False, default='host')
+    error_query    = Column(Text, nullable=True)
+    severity       = Column(String(32), nullable=False, default='info')
+    recipients     = Column(String(255), nullable=True)
+    last_run       = Column(DateTime(timezone=True), nullable=True)
+    next_run       = Column(DateTime(timezone=True), nullable=True)
+    last_output    = Column(Text, nullable=True)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at     = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

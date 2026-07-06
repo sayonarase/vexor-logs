@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        30%{?dist}
+Release:        31%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -31,6 +31,9 @@ Source16:       vexor-logs-retention-enforcer
 Source19:       006_log_anomaly.sql
 Source17:       vexor-logs-retention-enforcer.service
 Source18:       vexor-logs-retention-enforcer.timer
+Source20:       007_log_parse_rules.sql
+Source21:       008_log_metrics.sql
+Source22:       009_log_reports.sql
 
 Requires:       vexor-victorialogs
 Requires:       vexor-api >= 0.1.0-6
@@ -85,6 +88,9 @@ install -Dpm 0644 %{SOURCE13} %{buildroot}/usr/share/vexor-logs/migrations/003_l
 install -Dpm 0644 %{SOURCE14} %{buildroot}/usr/share/vexor-logs/migrations/004_log_retention_overrides.sql
 install -Dpm 0644 %{SOURCE15} %{buildroot}/usr/share/vexor-logs/migrations/005_log_alert_events.sql
 install -Dpm 0644 %{SOURCE19} %{buildroot}/usr/share/vexor-logs/migrations/006_log_anomaly.sql
+install -Dpm 0644 %{SOURCE20} %{buildroot}/usr/share/vexor-logs/migrations/007_log_parse_rules.sql
+install -Dpm 0644 %{SOURCE21} %{buildroot}/usr/share/vexor-logs/migrations/008_log_metrics.sql
+install -Dpm 0644 %{SOURCE22} %{buildroot}/usr/share/vexor-logs/migrations/009_log_reports.sql
 install -Dpm 0755 %{SOURCE16} %{buildroot}/usr/bin/vexor-logs-retention-enforcer
 install -Dpm 0644 %{SOURCE17} %{buildroot}/usr/lib/systemd/system/vexor-logs-retention-enforcer.service
 install -Dpm 0644 %{SOURCE18} %{buildroot}/usr/lib/systemd/system/vexor-logs-retention-enforcer.timer
@@ -154,12 +160,23 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/share/vexor-logs/migrations/004_log_retention_overrides.sql
 /usr/share/vexor-logs/migrations/005_log_alert_events.sql
 /usr/share/vexor-logs/migrations/006_log_anomaly.sql
+/usr/share/vexor-logs/migrations/007_log_parse_rules.sql
+/usr/share/vexor-logs/migrations/008_log_metrics.sql
+/usr/share/vexor-logs/migrations/009_log_reports.sql
 /usr/bin/vexor-logs-retention-enforcer
 /usr/lib/systemd/system/vexor-logs-retention-enforcer.service
 /usr/lib/systemd/system/vexor-logs-retention-enforcer.timer
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
 
 %changelog
+* Sun Jul 06 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-31
+- Log subsystem feature wave: field-extraction (parse) rules (F2), log-derived
+  metrics with warn/crit thresholds (F3), GeoIP country enrichment for IP
+  addresses in the search view (F4), a "show context" (surrounding lines) action
+  (F7), and scheduled log digests/reports (F8). Adds migrations 007/008/009 and
+  registers the parse-rules, geoip, metrics and reports routers; the evaluator now
+  samples metrics and delivers due reports.
+
 * Sat Jul 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-30
 - Interactive Windows installer: friendlier log selection - first a yes/no for
   the standard event logs (Application/System/Security), then a repeat prompt to
