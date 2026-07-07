@@ -4,6 +4,7 @@ import re
 import csv
 import io
 import json
+import socket
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -76,6 +77,42 @@ def _parse_vl_time(value: Optional[str]) -> Optional[datetime]:
     return dt
 
 
+_IP4_RE = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
+
+
+def _is_ip(s: str) -> bool:
+    if _IP4_RE.match(s):
+        try:
+            socket.inet_aton(s)
+            return True
+        except OSError:
+            return False
+    return ":" in s and all(c in "0123456789abcdefABCDEF:%" for c in s)
+
+
+def _resolve_ip(name: str, cache: dict) -> Optional[str]:
+    """Best-effort sender IP for a shipper. Returns the identifier itself when it
+    is already an IP address, otherwise a short-timeout forward-DNS lookup of the
+    hostname. None when it can't be resolved (e.g. a network device with no DNS
+    record). Results are cached per request to avoid repeat lookups."""
+    if name in cache:
+        return cache[name]
+    ip: Optional[str] = None
+    if _is_ip(name):
+        ip = name
+    else:
+        old = socket.getdefaulttimeout()
+        try:
+            socket.setdefaulttimeout(0.5)
+            ip = socket.gethostbyname(name)
+        except Exception:
+            ip = None
+        finally:
+            socket.setdefaulttimeout(old)
+    cache[name] = ip
+    return ip
+
+
 @router.get("/shippers")
 def shippers(
     window: str = Query("7d", description="discovery lookback window, e.g. 30m, 24h, 7d"),
@@ -101,6 +138,7 @@ def shippers(
     # but no `host`. Aggregate both so network devices also show up here.
     now = datetime.now(timezone.utc)
     out: list[dict] = []
+    ip_cache: dict = {}
 
     def _ingest(rows: list[dict], group_field: str, kind: str) -> None:
         for r in rows:
@@ -121,6 +159,7 @@ def shippers(
                 status = "unknown"
             out.append({
                 "host": ident,
+                "ip": _resolve_ip(ident, ip_cache),
                 "kind": kind,
                 "field": group_field,
                 "logs": logs,
