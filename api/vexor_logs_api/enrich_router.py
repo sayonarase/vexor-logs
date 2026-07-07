@@ -6,8 +6,10 @@ a dependency-free MMDB reader (``geoip.py``) so no new Python packages are
 required in vexor-api's venv. The search UI batches the IPs it renders and
 calls ``/logs/geoip`` to annotate rows with a country flag/name.
 
-ASN enrichment is NOT provided: the shipped DB-IP Lite database is
-country-only. An ASN database would be needed for that (follow-up).
+ASN enrichment is also provided when the DB-IP ASN Lite database
+(``/var/lib/vexor-geoip/dbip-asn-lite.mmdb``) is present: each IP is annotated
+with its autonomous-system number and owning organisation. Both databases are
+refreshed by ``vexor-download-stats --update-geo``.
 """
 from __future__ import annotations
 import re
@@ -36,8 +38,14 @@ _MAX_IPS = 512
 
 @router.get("/status")
 def status(_=Depends(require_viewer)) -> dict:
-    return {"available": geoip.available(), "database": geoip.DEFAULT_DB,
-            "kind": "country", "asn": False}
+    country_ok = geoip.available()
+    asn_ok = geoip.asn_available()
+    return {"available": country_ok or asn_ok,
+            "country_available": country_ok,
+            "asn_available": asn_ok,
+            "database": geoip.DEFAULT_DB,
+            "asn_database": geoip.ASN_DB,
+            "kind": "country+asn", "asn": asn_ok}
 
 
 @router.get("")
@@ -48,7 +56,9 @@ def resolve(ips: str = Query("", description="comma or space separated IPs"),
     Accepts a comma/space separated list, or free text from which IP literals
     are extracted. Private / unknown addresses are simply omitted from the map.
     """
-    if not geoip.available():
+    country_ok = geoip.available()
+    asn_ok = geoip.asn_available()
+    if not country_ok and not asn_ok:
         return {"available": False, "results": {}}
     found: list[str] = []
     seen: set[str] = set()
@@ -59,4 +69,11 @@ def resolve(ips: str = Query("", description="comma or space separated IPs"),
             found.append(ip)
         if len(found) >= _MAX_IPS:
             break
-    return {"available": True, "results": geoip.lookup_many(found)}
+    results: dict[str, dict] = {}
+    if country_ok:
+        for ip, info in geoip.lookup_many(found).items():
+            results.setdefault(ip, {}).update(info)
+    if asn_ok:
+        for ip, info in geoip.asn_lookup_many(found).items():
+            results.setdefault(ip, {}).update(info)
+    return {"available": True, "results": results}

@@ -24,10 +24,13 @@ DEFAULT_DB = os.environ.get(
 
 _METADATA_MARKER = b"\xab\xcd\xefMaxMind.com"
 
+ASN_DB = os.environ.get(
+    "VEXOR_ASN_DB", "/var/lib/vexor-geoip/dbip-asn-lite.mmdb")
+
 _lock = threading.Lock()
-_reader: "Optional[_MMDBReader]" = None
-_reader_path: Optional[str] = None
-_reader_mtime: float = 0.0
+# One cached reader per database path, so the country and ASN databases coexist
+# without evicting each other on every lookup.
+_readers: "dict[str, tuple[_MMDBReader, float]]" = {}
 
 
 class _Decoder:
@@ -207,22 +210,21 @@ class _MMDBReader:
 
 
 def _get_reader(path: Optional[str] = None) -> "Optional[_MMDBReader]":
-    global _reader, _reader_path, _reader_mtime
     db_path = path or DEFAULT_DB
     try:
         mtime = os.path.getmtime(db_path)
     except OSError:
         return None
     with _lock:
-        if (_reader is None or _reader_path != db_path
-                or _reader_mtime != mtime):
+        cached = _readers.get(db_path)
+        if cached is None or cached[1] != mtime:
             try:
-                _reader = _MMDBReader(db_path)
-                _reader_path = db_path
-                _reader_mtime = mtime
+                _readers[db_path] = (_MMDBReader(db_path), mtime)
             except Exception:
-                _reader = None
-        return _reader
+                _readers.pop(db_path, None)
+                return None
+        entry = _readers.get(db_path)
+        return entry[0] if entry else None
 
 
 def available() -> bool:
@@ -255,6 +257,39 @@ def lookup_many(ips: list[str]) -> dict[str, dict]:
         if ip in out:
             continue
         res = lookup(ip)
+        if res:
+            out[ip] = res
+    return out
+
+
+def asn_available() -> bool:
+    return _get_reader(ASN_DB) is not None
+
+
+def asn_lookup(ip: str) -> Optional[dict]:
+    """Return {'asn','asn_org'} for an IP, or None."""
+    reader = _get_reader(ASN_DB)
+    if reader is None:
+        return None
+    raw = reader.get(ip)
+    if not raw:
+        return None
+    num = raw.get("autonomous_system_number")
+    org = raw.get("autonomous_system_organization")
+    if num is None and not org:
+        return None
+    return {"asn": num, "asn_org": org}
+
+
+def asn_lookup_many(ips: list[str]) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    reader = _get_reader(ASN_DB)
+    if reader is None:
+        return out
+    for ip in ips:
+        if ip in out:
+            continue
+        res = asn_lookup(ip)
         if res:
             out[ip] = res
     return out
