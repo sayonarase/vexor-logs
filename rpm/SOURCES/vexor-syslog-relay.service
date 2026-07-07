@@ -1,0 +1,13 @@
+[Unit]
+Description=Vexor syslog relay reconciler (applies /etc/vexor/logs.env to rsyslog)
+Documentation=https://github.com/sayonarase/vexor-logs
+After=rsyslog.service vexor-victorialogs.service
+Wants=rsyslog.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/vexor/vexor-syslog-relay-apply
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

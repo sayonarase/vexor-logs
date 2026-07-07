@@ -1,0 +1,15 @@
+// Allow the vexor user (running vexor-api under NoNewPrivileges, which breaks
+// sudo) to trigger the syslog-relay reconciler unit. That oneshot re-reads
+// /etc/vexor/logs.env and (re)writes the rsyslog drop-in as root. The API can
+// only start this fixed unit — it cannot pass arbitrary rsyslog config — so the
+// blast radius is limited to the numeric ports/enable flag it writes to
+// logs.env.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        subject.user == "vexor") {
+        var unit = action.lookup("unit");
+        if (unit == "vexor-syslog-relay.service") {
+            return polkit.Result.YES;
+        }
+    }
+});

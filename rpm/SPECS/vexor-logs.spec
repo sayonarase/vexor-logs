@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        33%{?dist}
+Release:        34%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -34,8 +34,12 @@ Source18:       vexor-logs-retention-enforcer.timer
 Source20:       007_log_parse_rules.sql
 Source21:       008_log_metrics.sql
 Source22:       009_log_reports.sql
+Source23:       vexor-syslog-relay-apply
+Source24:       vexor-syslog-relay.service
+Source25:       92-vexor-syslog-relay.rules
 
 Requires:       vexor-victorialogs
+Requires:       rsyslog
 Requires:       vexor-api >= 0.1.0-6
 Requires:       python3
 
@@ -96,6 +100,12 @@ install -Dpm 0644 %{SOURCE17} %{buildroot}/usr/lib/systemd/system/vexor-logs-ret
 install -Dpm 0644 %{SOURCE18} %{buildroot}/usr/lib/systemd/system/vexor-logs-retention-enforcer.timer
 install -Dpm 0755 %{SOURCE12} %{buildroot}/usr/share/vexor-logs/vexor-logs-postinstall.sh
 
+# Syslog relay: root reconciler + oneshot unit + polkit rule so the vexor
+# user can trigger it from the UI (sudo is blocked by NoNewPrivileges).
+install -Dpm 0755 %{SOURCE23} %{buildroot}/usr/libexec/vexor/vexor-syslog-relay-apply
+install -Dpm 0644 %{SOURCE24} %{buildroot}/usr/lib/systemd/system/vexor-syslog-relay.service
+install -Dpm 0644 %{SOURCE25} %{buildroot}/etc/polkit-1/rules.d/92-vexor-syslog-relay.rules
+
 %post
 %systemd_post vexor-log-alerts-evaluator.service
 if [ ! -f /etc/vexor/logs.env ]; then
@@ -119,7 +129,7 @@ systemctl reload polkit 2>/dev/null || systemctl restart polkit 2>/dev/null || :
 
 %systemd_post vexor-logs-retention-enforcer.timer
 # Ensure new logs.env knobs exist (retention disk + syslog receiver)
-for kv in 'VEXOR_LOGS_DISK_MODE=none' 'VEXOR_LOGS_DISK_BYTES=' 'VEXOR_LOGS_DISK_PERCENT=' 'VEXOR_LOGS_SYSLOG_UDP=' 'VEXOR_LOGS_SYSLOG_TCP='; do
+for kv in 'VEXOR_LOGS_DISK_MODE=none' 'VEXOR_LOGS_DISK_BYTES=' 'VEXOR_LOGS_DISK_PERCENT=' 'VEXOR_LOGS_SYSLOG_UDP=' 'VEXOR_LOGS_SYSLOG_TCP=' 'VEXOR_LOGS_RELAY_ENABLED=1' 'VEXOR_LOGS_RELAY_UDP=514' 'VEXOR_LOGS_RELAY_TCP=514'; do
     k=${kv%%=*}
     grep -q "^${k}=" /etc/vexor/logs.env 2>/dev/null || echo "$kv" >> /etc/vexor/logs.env
 done
@@ -129,6 +139,15 @@ systemctl enable --now vexor-logs-retention-enforcer.timer 2>/dev/null || :
 # Apply DB schema drift migrations - idempotent (v0.1.0-7)
 if [ -x /usr/share/vexor-logs/vexor-logs-postinstall.sh ]; then
     /usr/share/vexor-logs/vexor-logs-postinstall.sh || :
+fi
+
+# Syslog relay: enable the reconciler unit (self-heals the rsyslog drop-in
+# at boot) and apply the current logs.env state now. Idempotent; upgrades
+# preserve whatever RELAY_ENABLED the operator last set.
+systemctl daemon-reload 2>/dev/null || :
+systemctl enable vexor-syslog-relay.service 2>/dev/null || :
+if [ -x /usr/libexec/vexor/vexor-syslog-relay-apply ]; then
+    /usr/libexec/vexor/vexor-syslog-relay-apply || :
 fi
 
 systemctl try-restart vexor-api.service 2>/dev/null || :
@@ -167,8 +186,22 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /usr/lib/systemd/system/vexor-logs-retention-enforcer.service
 /usr/lib/systemd/system/vexor-logs-retention-enforcer.timer
 /usr/share/vexor-logs/vexor-logs-postinstall.sh
+/usr/libexec/vexor/vexor-syslog-relay-apply
+/usr/lib/systemd/system/vexor-syslog-relay.service
+/etc/polkit-1/rules.d/92-vexor-syslog-relay.rules
 
 %changelog
+* Tue Jul 07 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-34
+- Syslog ingestion now runs through a built-in rsyslog relay that stamps the
+  REAL sender IP (fromhost-ip) and forwards JSON to VictoriaLogs. Network
+  devices (switches, firewalls, routers) therefore show up on the Log
+  Shippers page with their source IP, which VictoriaLogs' native syslog
+  receiver could not capture. Ships /usr/libexec/vexor/vexor-syslog-relay-apply
+  (root reconciler that generates the rsyslog drop-in from logs.env),
+  vexor-syslog-relay.service (oneshot) and a polkit rule so the vexor user can
+  trigger it; Requires rsyslog. The Logs Settings syslog toggle now drives the
+  relay (VEXOR_LOGS_RELAY_ENABLED/UDP/TCP) and retires VictoriaLogs' native
+  :514 receiver. /shippers prefers the real source_ip for syslog senders.
 * Sun Jul 06 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-31
 - Log subsystem feature wave: field-extraction (parse) rules (F2), log-derived
   metrics with warn/crit thresholds (F3), GeoIP country enrichment for IP

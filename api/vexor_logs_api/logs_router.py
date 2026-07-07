@@ -170,15 +170,59 @@ def shippers(
 
     agent_q = (f"_time:{window} host:* | "
                "stats by (host) count() as logs, max(_time) as last_seen")
+    # Syslog senders carry the real packet source IP in `source_ip` (stamped by
+    # the rsyslog relay that sits in front of VictoriaLogs). Group by
+    # hostname + source_ip, then collapse to one row per device keeping the most
+    # recent source_ip; older pre-relay data has no source_ip and falls back to
+    # a DNS lookup.
     syslog_q = (f"_time:{window} hostname:* NOT host:* | "
-                "stats by (hostname) count() as logs, max(_time) as last_seen")
+                "stats by (hostname, source_ip) count() as logs, max(_time) as last_seen")
     try:
         agent_rows = _client.query(agent_q, limit=10000)
         syslog_rows = _client.query(syslog_q, limit=10000)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
     _ingest(agent_rows, "host", "agent")
-    _ingest(syslog_rows, "hostname", "syslog")
+
+    by_host: dict = {}
+    for r in syslog_rows:
+        hn = (r.get("hostname") or "").strip()
+        if not hn:
+            continue
+        try:
+            logs = int(r.get("logs") or 0)
+        except Exception:
+            logs = 0
+        last_raw = r.get("last_seen")
+        parsed = _parse_vl_time(last_raw)
+        sip = (r.get("source_ip") or "").strip() or None
+        cur = by_host.get(hn)
+        if cur is None:
+            by_host[hn] = {"logs": logs, "last_raw": last_raw, "parsed": parsed, "ip": sip}
+        else:
+            cur["logs"] += logs
+            if parsed is not None and (cur["parsed"] is None or parsed > cur["parsed"]):
+                cur["parsed"] = parsed
+                cur["last_raw"] = last_raw
+                cur["ip"] = sip
+    for hn, d in by_host.items():
+        parsed = d["parsed"]
+        if parsed is not None:
+            age = max(0, int((now - parsed).total_seconds()))
+            status = "ok" if age <= ok_within else ("stale" if age <= stale_within else "silent")
+        else:
+            age = None
+            status = "unknown"
+        out.append({
+            "host": hn,
+            "ip": d["ip"] or _resolve_ip(hn, ip_cache),
+            "kind": "syslog",
+            "field": "hostname",
+            "logs": d["logs"],
+            "last_seen": d["last_raw"],
+            "age_seconds": age,
+            "status": status,
+        })
 
     out.sort(key=lambda x: (x["age_seconds"] is None, x["age_seconds"] or 0))
     counts = {"ok": 0, "stale": 0, "silent": 0, "unknown": 0}

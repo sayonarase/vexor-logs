@@ -1,0 +1,115 @@
+#!/bin/bash
+# vexor-syslog-relay-apply — reconcile the rsyslog syslog relay from
+# /etc/vexor/logs.env. Runs as ROOT (from the RPM %post and from the
+# vexor-syslog-relay.service oneshot that the vexor API triggers via polkit).
+#
+# The relay receives syslog from network devices (switches, firewalls, routers
+# that cannot store their own logs), stamps the REAL sender IP (fromhost-ip)
+# that VictoriaLogs' native syslog receiver cannot capture, and forwards each
+# message as JSON to VictoriaLogs' /insert/jsonline API. Only network-received
+# messages hit this ruleset, so local system logging is left untouched.
+#
+# logs.env is writable by the (unprivileged) vexor user, so we NEVER source it
+# here — we parse KEY=VALUE lines safely to avoid running attacker-controlled
+# shell as root.
+set -euo pipefail
+
+CONF=/etc/rsyslog.d/50-vexor-syslog-relay.conf
+LOGS_ENV=/etc/vexor/logs.env
+
+_getenv() {
+    # Safely read the last KEY=VALUE for $1 from logs.env (no sourcing).
+    [ -f "$LOGS_ENV" ] || return 0
+    grep -E "^$1=" "$LOGS_ENV" 2>/dev/null | tail -1 | cut -d= -f2- \
+        | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+}
+
+enabled=0
+case "$(_getenv VEXOR_LOGS_RELAY_ENABLED)" in
+    1|true|TRUE|yes|YES|on|ON) enabled=1 ;;
+esac
+udp="$(_getenv VEXOR_LOGS_RELAY_UDP)"
+tcp="$(_getenv VEXOR_LOGS_RELAY_TCP)"
+case "$udp" in ''|*[!0-9]*) udp=514 ;; esac
+case "$tcp" in ''|*[!0-9]*) tcp=514 ;; esac
+
+free_vl_514() {
+    # Retire VictoriaLogs' native syslog receiver so it releases :514.
+    [ -f "$LOGS_ENV" ] || return 0
+    local changed=0 k
+    for k in VEXOR_LOGS_SYSLOG_UDP VEXOR_LOGS_SYSLOG_TCP; do
+        if grep -qE "^${k}=.+" "$LOGS_ENV" 2>/dev/null; then
+            sed -i "s|^${k}=.*|${k}=|" "$LOGS_ENV"
+            changed=1
+        fi
+    done
+    if [ "$changed" = 1 ]; then
+        systemctl restart vexor-victorialogs 2>/dev/null || true
+    fi
+}
+
+write_conf() {
+    cat > "$CONF" <<'RSCONF'
+# Managed by Vexor (vexor-syslog-relay-apply). Do not edit by hand; change the
+# syslog relay from the Vexor UI (Logs -> Settings) instead.
+module(load="imudp")
+module(load="imtcp")
+module(load="omhttp")
+
+template(name="vexor_vl_jsonline" type="list") {
+  constant(value="{")
+  property(name="msg" outname="message" format="jsonf")
+  constant(value=",")
+  property(name="hostname" outname="hostname" format="jsonf")
+  constant(value=",")
+  property(name="programname" outname="app_name" format="jsonf")
+  constant(value=",")
+  property(name="procid" outname="proc_id" format="jsonf")
+  constant(value=",")
+  property(name="fromhost-ip" outname="source_ip" format="jsonf")
+  constant(value=",")
+  property(name="syslogseverity" outname="severity" format="jsonf")
+  constant(value=",")
+  property(name="syslogfacility" outname="facility" format="jsonf")
+  constant(value=",")
+  property(name="syslogfacility-text" outname="facility_keyword" format="jsonf")
+  constant(value=",\"timestamp\":\"")
+  property(name="timereported" dateFormat="rfc3339")
+  constant(value="\"}")
+}
+
+ruleset(name="vexor_syslog_relay"
+        queue.type="linkedList"
+        queue.filename="vexor_syslog_relay_q"
+        queue.maxdiskspace="268435456"
+        queue.saveonshutdown="on") {
+  action(type="omhttp"
+         server="127.0.0.1"
+         serverport="9428"
+         restpath="insert/jsonline?_msg_field=message&_time_field=timestamp&_stream_fields=source_ip,hostname"
+         template="vexor_vl_jsonline"
+         batch="on"
+         batch.format="newline"
+         batch.maxsize="200"
+         httpheaders=["Content-Type: application/x-ndjson"]
+         useHttps="off"
+         errorfile="/var/log/vexor-syslog-relay-err.log")
+}
+
+input(type="imudp" port="__UDP__" ruleset="vexor_syslog_relay")
+input(type="imtcp" port="__TCP__" ruleset="vexor_syslog_relay")
+RSCONF
+    sed -i "s/__UDP__/${udp}/; s/__TCP__/${tcp}/" "$CONF"
+}
+
+if [ "$enabled" = 1 ]; then
+    free_vl_514
+    write_conf
+    systemctl enable rsyslog >/dev/null 2>&1 || true
+    systemctl restart rsyslog
+    echo "vexor syslog relay enabled (udp:${udp} tcp:${tcp})"
+else
+    rm -f "$CONF"
+    systemctl restart rsyslog 2>/dev/null || true
+    echo "vexor syslog relay disabled"
+fi

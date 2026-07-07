@@ -109,12 +109,15 @@ def _current_settings() -> Settings:
             disk_percent = int(env["VEXOR_LOGS_DISK_PERCENT"])
     except ValueError:
         disk_percent = None
-    udp = env.get("VEXOR_LOGS_SYSLOG_UDP", "")
-    tcp = env.get("VEXOR_LOGS_SYSLOG_TCP", "")
-    syslog_enabled = bool(udp or tcp)
+    # Syslog ingestion runs through the rsyslog relay (it captures the real
+    # sender IP, which VictoriaLogs' native receiver cannot). RELAY_ENABLED/UDP/
+    # TCP drive it; the legacy VEXOR_LOGS_SYSLOG_UDP/TCP (VL native receiver) are
+    # kept empty and retired so the two never fight over :514.
+    relay_enabled = (env.get("VEXOR_LOGS_RELAY_ENABLED", "") or "").lower() in (
+        "1", "true", "yes", "on")
 
-    def _port(addr: str, default: int) -> int:
-        m = re.search(r":(\d+)\s*$", addr)
+    def _port(val: str, default: int) -> int:
+        m = re.search(r"(\d+)\s*$", val or "")
         try:
             return int(m.group(1)) if m else default
         except ValueError:
@@ -125,9 +128,9 @@ def _current_settings() -> Settings:
         disk_mode=disk_mode,
         disk_bytes=env.get("VEXOR_LOGS_DISK_BYTES") or None,
         disk_percent=disk_percent,
-        syslog_enabled=syslog_enabled,
-        syslog_udp_port=_port(udp, 514),
-        syslog_tcp_port=_port(tcp, 514),
+        syslog_enabled=relay_enabled,
+        syslog_udp_port=_port(env.get("VEXOR_LOGS_RELAY_UDP", ""), 514),
+        syslog_tcp_port=_port(env.get("VEXOR_LOGS_RELAY_TCP", ""), 514),
         vexor_logs_url=env.get("VEXOR_LOGS_URL", "http://127.0.0.1:9428"),
     )
 
@@ -144,8 +147,14 @@ def put_settings(body: Settings, _=Depends(require_admin)) -> Settings:
         "VEXOR_LOGS_DISK_MODE": body.disk_mode,
         "VEXOR_LOGS_DISK_BYTES": body.disk_bytes if body.disk_mode == "bytes" and body.disk_bytes else "",
         "VEXOR_LOGS_DISK_PERCENT": str(body.disk_percent) if body.disk_mode == "percent" and body.disk_percent else "",
-        "VEXOR_LOGS_SYSLOG_UDP": f":{body.syslog_udp_port}" if body.syslog_enabled else "",
-        "VEXOR_LOGS_SYSLOG_TCP": f":{body.syslog_tcp_port}" if body.syslog_enabled else "",
+        # Syslog ingestion via the rsyslog relay (captures the real sender IP).
+        "VEXOR_LOGS_RELAY_ENABLED": "1" if body.syslog_enabled else "0",
+        "VEXOR_LOGS_RELAY_UDP": str(body.syslog_udp_port),
+        "VEXOR_LOGS_RELAY_TCP": str(body.syslog_tcp_port),
+        # Retire VictoriaLogs' native syslog receiver so it never fights the
+        # relay for :514.
+        "VEXOR_LOGS_SYSLOG_UDP": "",
+        "VEXOR_LOGS_SYSLOG_TCP": "",
     }
     if body.vexor_logs_url:
         updates["VEXOR_LOGS_URL"] = str(body.vexor_logs_url)
@@ -182,6 +191,38 @@ def put_settings(body: Settings, _=Depends(require_admin)) -> Settings:
             detail={
                 "error": "restart_exception",
                 "message": "Settings were saved but the restart command could not be executed.",
+                "exception": f"{type(e).__name__}: {e}",
+            },
+        )
+    # Reconcile the syslog relay: the polkit-allowed oneshot re-reads logs.env
+    # and (re)writes the rsyslog drop-in as root, freeing :514 from VictoriaLogs
+    # when enabled. We can only start this fixed unit, not inject rsyslog config.
+    relay_cmd = ["systemctl", "restart", "vexor-syslog-relay.service"]
+    try:
+        rr = subprocess.run(relay_cmd, check=False, timeout=40, capture_output=True)
+        if rr.returncode != 0:
+            stderr_txt = (rr.stderr or b"").decode(errors="replace").strip()
+            log.warning("vexor-syslog-relay reconcile failed rc=%s stderr=%s",
+                        rr.returncode, stderr_txt[:300])
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "relay_failed",
+                    "message": ("Settings were saved but the syslog relay could not be "
+                                "reconciled, so network-device syslog may not be active."),
+                    "rc": rr.returncode,
+                    "stderr": stderr_txt[:500],
+                },
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.warning("syslog relay reconcile failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "relay_exception",
+                "message": "Settings were saved but the syslog relay reconcile could not run.",
                 "exception": f"{type(e).__name__}: {e}",
             },
         )
