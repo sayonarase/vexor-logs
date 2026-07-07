@@ -95,41 +95,60 @@ def shippers(
         raise HTTPException(400, "invalid window (expected e.g. 30m, 24h, 7d)")
     if stale_within < ok_within:
         stale_within = ok_within
-    q = f"_time:{window} * | stats by (host) count() as logs, max(_time) as last_seen"
-    try:
-        rows = _client.query(q, limit=10000)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
+    # Two populations feed the log store: (1) agent shippers (vector / fluent-bit)
+    # stamp a `host` field; (2) native-syslog senders (switches, firewalls,
+    # routers pointed straight at VictoriaLogs' :514 receiver) carry `hostname`
+    # but no `host`. Aggregate both so network devices also show up here.
     now = datetime.now(timezone.utc)
     out: list[dict] = []
-    for r in rows:
-        host = (r.get("host") or "").strip()
-        if not host:
-            continue
-        try:
-            logs = int(r.get("logs") or 0)
-        except Exception:
-            logs = 0
-        last_raw = r.get("last_seen")
-        parsed = _parse_vl_time(last_raw)
-        if parsed is not None:
-            age = max(0, int((now - parsed).total_seconds()))
-            status = "ok" if age <= ok_within else ("stale" if age <= stale_within else "silent")
-        else:
-            age = None
-            status = "unknown"
-        out.append({
-            "host": host,
-            "logs": logs,
-            "last_seen": last_raw,
-            "age_seconds": age,
-            "status": status,
-        })
+
+    def _ingest(rows: list[dict], group_field: str, kind: str) -> None:
+        for r in rows:
+            ident = (r.get(group_field) or "").strip()
+            if not ident:
+                continue
+            try:
+                logs = int(r.get("logs") or 0)
+            except Exception:
+                logs = 0
+            last_raw = r.get("last_seen")
+            parsed = _parse_vl_time(last_raw)
+            if parsed is not None:
+                age = max(0, int((now - parsed).total_seconds()))
+                status = "ok" if age <= ok_within else ("stale" if age <= stale_within else "silent")
+            else:
+                age = None
+                status = "unknown"
+            out.append({
+                "host": ident,
+                "kind": kind,
+                "field": group_field,
+                "logs": logs,
+                "last_seen": last_raw,
+                "age_seconds": age,
+                "status": status,
+            })
+
+    agent_q = (f"_time:{window} host:* | "
+               "stats by (host) count() as logs, max(_time) as last_seen")
+    syslog_q = (f"_time:{window} hostname:* NOT host:* | "
+                "stats by (hostname) count() as logs, max(_time) as last_seen")
+    try:
+        agent_rows = _client.query(agent_q, limit=10000)
+        syslog_rows = _client.query(syslog_q, limit=10000)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"victorialogs: {e}")
+    _ingest(agent_rows, "host", "agent")
+    _ingest(syslog_rows, "hostname", "syslog")
+
     out.sort(key=lambda x: (x["age_seconds"] is None, x["age_seconds"] or 0))
     counts = {"ok": 0, "stale": 0, "silent": 0, "unknown": 0}
+    kind_counts = {"agent": 0, "syslog": 0}
     for x in out:
         counts[x["status"]] = counts.get(x["status"], 0) + 1
-    return {"shippers": out, "count": len(out), "window": window, "status_counts": counts}
+        kind_counts[x["kind"]] = kind_counts.get(x["kind"], 0) + 1
+    return {"shippers": out, "count": len(out), "window": window,
+            "status_counts": counts, "kind_counts": kind_counts}
 
 
 @router.get("/tail")
