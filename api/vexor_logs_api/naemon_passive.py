@@ -258,6 +258,37 @@ def remove_log_service(host: str, rule_slug: str) -> None:
             raise NaemonReloadFailed(err)
 
 
+def purge_host(host: str) -> int:
+    """Remove ALL passive log-alert service stanzas bound to *host* and reload.
+
+    Called when a host is deleted so ``log_alerts.cfg`` never references a host
+    that no longer exists -- an orphaned stanza makes the next naemon reload
+    fail its pre-flight validation and roll the whole activation back. Removing
+    stanzas for a going-away host can only make the config *more* valid, so a
+    reload failure here is logged but never raised. Returns the number of
+    stanzas removed.
+    """
+    if not host:
+        return 0
+    try:
+        host = _validate_host_name(host)
+    except InvalidHostName:
+        return 0
+    prefix = host + "::"
+    blocks = _read_blocks()
+    keys = [k for k in blocks if k.startswith(prefix)]
+    if not keys:
+        return 0
+    for k in keys:
+        blocks.pop(k, None)
+    _write_blocks(blocks)
+    try:
+        _reload_naemon()
+    except Exception:
+        pass
+    return len(keys)
+
+
 def _sanitize(s: str) -> str:
     return (s or "").replace("\r", " ").replace("\n", " ").replace("\x00", "").replace(";", ",")
 
