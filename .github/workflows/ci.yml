@@ -12,7 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        # vexor-logs targets Python 3.12 (matches vexor-api CI and the
+        # production server). shipper_router.py uses PEP 701 f-strings
+        # (nested same-quote), which are 3.12+ only by design.
+        python-version: ["3.12"]
     steps:
       - uses: actions/checkout@v4
 
