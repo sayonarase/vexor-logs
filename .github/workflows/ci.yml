@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  syntax:
+    name: python syntax
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Byte-compile the log API package
+        # compileall checks syntax without importing, so the `from app ...`
+        # references into vexor-api (a runtime Requires, not vendored here)
+        # do not need to resolve.
+        run: python -m compileall -q api/vexor_logs_api
+
+  shellcheck:
+    name: shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bash -n (syntax) on shell scripts
+        run: |
+          fail=0
+          while IFS= read -r -d '' f; do
+            echo "checking $f"
+            bash -n "$f" || fail=1
+          done < <(find . -name '*.sh' -not -path './ui/node_modules/*' -print0)
+          exit $fail
