@@ -1,4 +1,4 @@
-%global vl_version 1.51.0
+%global vl_version 1.52.0
 %define _build_id_links none
 %global __os_install_post %{nil}
 %global debug_package %{nil}
@@ -7,7 +7,7 @@ AutoProv: no
 
 Name:           vexor-victorialogs
 Version:        %{vl_version}
-Release:        2%{?dist}
+Release:        1%{?dist}
 Summary:        VictoriaLogs daemon packaged for Vexor
 License:        ASL 2.0
 URL:            https://github.com/VictoriaMetrics/VictoriaLogs
@@ -75,6 +75,19 @@ systemctl try-restart vexor-victorialogs.service 2>/dev/null || :
 %dir /etc/vexor/logs
 
 %changelog
+* Mon Aug 17 2026 Vexor <build@vexormon.com> - 1.52.0-1
+- Update VictoriaLogs to v1.52.0.
+- Fixes a LogsQL regression introduced in v1.51.0 where filter pipes written
+  without the 'filter' prefix (| !foo, | {host="x"}, | >5, | not foo) were
+  rejected with 'unexpected pipe'.
+- Fixes RFC3164 syslog messages received just after new year being stamped
+  with the previous year (could drop them under a short retention), and the
+  year is now computed in -syslog.timezone instead of the server timezone.
+- Fixes field_names pipe not respecting hidden_fields_filters (leaked the
+  existence of hidden fields).
+- Fixes -search.maxQueueDuration being ignored for queued requests, where a
+  few slow queries could stall other requests.
+- SECURITY: upstream Go builder bumped 1.26.4 -> 1.26.5.
 * Sat Jun 20 2026 Vexor <release@sayonara.dyndns.org> - 1.51.0-2
 - Launcher: wire optional disk-based retention (VEXOR_LOGS_DISK_MODE/BYTES/
   PERCENT) and a native syslog receiver (VEXOR_LOGS_SYSLOG_UDP/TCP) into the
