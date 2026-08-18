@@ -16,7 +16,7 @@ rpm/RPMS/
 rpm/SRPMS/
 rpm/SOURCES/*.tar.gz
 rpm/SOURCES/victoria-logs-*
-rpm/SOURCES/vector-*
+rpm/SOURCES/vector-*.tar.gz
 rpm/SOURCES/fluent-bit-*
 # Local
 .DS_Store

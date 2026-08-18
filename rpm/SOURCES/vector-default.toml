@@ -1,0 +1,56 @@
+# Vexor Logs default Vector configuration.
+data_dir = "/var/lib/vector"
+
+[sources.host_files]
+type = "file"
+include = ["/var/log/messages", "/var/log/secure", "/var/log/audit/audit.log"]
+ignore_older_secs = 86400
+read_from = "end"
+
+[sources.journald]
+type = "journald"
+current_boot_only = true
+
+[transforms.tag]
+type = "remap"
+inputs = ["host_files", "journald"]
+source = '''
+.host = get_hostname() ?? get_env_var("HOSTNAME") ?? "unknown"
+if exists(.SYSTEMD_UNIT) {
+  .service = .SYSTEMD_UNIT
+} else if exists(.file) {
+  .service = .file
+} else {
+  .service = "unknown"
+}
+if exists(.message) {
+  ._msg = del(.message)
+} else if exists(.MESSAGE) {
+  ._msg = .MESSAGE
+} else {
+  ._msg = ""
+}
+'''
+
+[sinks.victorialogs]
+type = "loki"
+inputs = ["tag"]
+# ${VEXOR_LOGS_URL} comes from /etc/vexor/logs.env. Vector >= 0.57 disables
+# environment-variable interpolation by default, so that same file also sets
+# VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true. Do not hard-code this
+# endpoint: on a host that ships to a remote Vexor server it must resolve to
+# that server, not to localhost.
+endpoint = "${VEXOR_LOGS_URL:-http://127.0.0.1:9428}/insert"
+encoding.codec = "json"
+compression = "none"
+labels = { host = "{{ host }}", service = "{{ service }}" }
+out_of_order_action = "accept"
+# Vector 0.57 added template confinement, which rejects a template that has no
+# static prefix. Our labels are whole-value event references ({{ host }} /
+# {{ service }}), so a prefix is not meaningful without changing every stored
+# label value and breaking existing LogsQL queries and dashboards.
+# Upstream treats this exact case as a false positive: vectordotdev/vector
+# #25898 (vector-provided references) and #26011 (non-URL fields).
+# This is not a regression: 0.56 had no confinement at all, so this only makes
+# the pre-existing behaviour explicit. Remove once upstream ships the fix.
+dangerously_allow_unconfined_template_resolution = true
