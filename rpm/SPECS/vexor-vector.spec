@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-vector
 Version:        0.57.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Vector agent packaged with Vexor Logs defaults
 License:        MPL-2.0
 URL:            https://vector.dev/
@@ -81,6 +81,12 @@ fi
 /usr/lib/systemd/system/vexor-vector.service
 
 %changelog
+* Wed Sep 02 2026 Vexor <ops@vexormon.com> - 0.57.0-2
+- Create the Vector data_dir via StateDirectory=vector. vector.toml sets
+  data_dir=/var/lib/vector, but no package owned that directory and the unit
+  never declared it, so a fresh install (or any host with an emptied
+  /var/lib) failed to start with 'data_dir does not exist'.
+
 * Tue Aug 18 2026 Vexor <release@sayonara.dyndns.org> - 0.57.0-1
 - Update bundled Vector to 0.57.0 (security-focused release with breaking changes).
 - Vector 0.57 makes ${VAR} interpolation opt-in and adds sink template confinement.

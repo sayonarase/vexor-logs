@@ -6,6 +6,11 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/vexor/logs.env
+# vector.toml sets data_dir = /var/lib/vector. Nothing else creates it: the
+# RPM does not own it and Vector 0.57 refuses to start when it is missing
+# ("data_dir ... does not exist"). StateDirectory recreates it on every
+# start, so fresh installs and wiped/ephemeral /var/lib both self-heal.
+StateDirectory=vector
 ExecStart=/usr/bin/vector --config /etc/vexor/logs/vector.toml
 Restart=on-failure
 RestartSec=5s
