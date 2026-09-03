@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        36%{?dist}
+Release:        37%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -191,6 +191,10 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /etc/polkit-1/rules.d/92-vexor-syslog-relay.rules
 
 %changelog
+* Thu Sep 03 2026 Vexor <support@vexormon.com> - 0.1.0-37
+- logs: the /storage endpoint read the long-renamed vlstorage_data_size_bytes metric,
+  which no longer exists in VictoriaLogs, so the reported size always fell back to a
+  directory scan. Read vl_data_size_bytes instead and sum its per-type series.
 * Tue Jul 07 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-34
 - Syslog ingestion now runs through a built-in rsyslog relay that stamps the
   REAL sender IP (fromhost-ip) and forwards JSON to VictoriaLogs. Network

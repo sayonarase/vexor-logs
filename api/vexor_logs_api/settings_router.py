@@ -250,6 +250,18 @@ def _stat_storage() -> tuple[int, int]:
     return used, free
 
 
+def _parse_metric_sum(text: str, name: str) -> Optional[float]:
+    """Sum every labelled series of a metric, e.g. vl_data_size_bytes{type=...}."""
+    rx = re.compile(rf"^{re.escape(name)}(?:\{{[^}}]*\}})?\s+([0-9.eE+-]+)\s*$", re.M)
+    total: Optional[float] = None
+    for m in rx.finditer(text):
+        try:
+            total = (total or 0.0) + float(m.group(1))
+        except ValueError:
+            continue
+    return total
+
+
 def _parse_metric(text: str, name: str) -> Optional[float]:
     rx = re.compile(rf"^{re.escape(name)}(?:\{{[^}}]*\}})?\s+([0-9.eE+-]+)\s*$", re.M)
     m = rx.search(text)
@@ -286,7 +298,8 @@ async def storage(_=Depends(require_viewer)) -> dict:
     import asyncio as _asyncio
     settings = _current_settings()
     metrics = await _asyncio.to_thread(_client.metrics_text)
-    metric_used = _parse_metric(metrics, "vlstorage_data_size_bytes")
+    # VictoriaLogs reports this per storage type (storage + indexdb); sum them.
+    metric_used = _parse_metric_sum(metrics, "vl_data_size_bytes")
     used_disk, free = await _asyncio.to_thread(_stat_storage)
     oldest = await _asyncio.to_thread(_oldest_log_ts)
     used = int(metric_used) if metric_used is not None else used_disk
