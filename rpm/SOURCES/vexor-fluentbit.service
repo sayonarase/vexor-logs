@@ -6,7 +6,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/vexor/logs.env
-ExecStart=/opt/fluent-bit/bin/fluent-bit -c /etc/vexor/logs/fluentbit.conf
+Environment=HOSTNAME=%H
+ExecStart=/usr/bin/fluent-bit -c /etc/vexor/logs/fluentbit.conf
+StateDirectory=vexor-fluentbit
 Restart=on-failure
 RestartSec=5s
 
