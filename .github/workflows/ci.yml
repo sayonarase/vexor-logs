@@ -44,3 +44,25 @@ jobs:
             bash -n "$f" || fail=1
           done < <(find . -name '*.sh' -not -path './ui/node_modules/*' -print0)
           exit $fail
+
+  build-inputs:
+    name: units the build actually installs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail on systemd units no spec installs
+        # A unit committed outside rpm/SOURCES is read by nothing: editing it
+        # looks like it works and silently changes nothing. A duplicate set
+        # under systemd/ drifted this way and ended up pointing fluent-bit at
+        # a binary path that does not exist.
+        run: |
+          fail=0
+          for f in $(git ls-files '*.service' '*.timer'); do
+            case "$f" in
+              rpm/SOURCES/*) continue ;;
+            esac
+            echo "$f is a unit no spec installs (units belong in rpm/SOURCES/)"
+            fail=1
+          done
+          exit $fail
