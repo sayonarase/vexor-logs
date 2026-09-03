@@ -110,7 +110,7 @@ fi
   tagged with the real node hostname. %config(noreplace) keeps existing configs;
   restart vexor-vector to pick up the new default on a fresh install.
 
-* Tue Nov 18 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.56.0-1
+* Thu Jun 04 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.56.0-1
 - Update bundled Vector to 0.56.0.
-* Mon Nov 17 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.55.0-1
+* Thu May 21 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.55.0-1
 - Initial Vector wrapper for Vexor Logs.

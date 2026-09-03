@@ -202,7 +202,7 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
   trigger it; Requires rsyslog. The Logs Settings syslog toggle now drives the
   relay (VEXOR_LOGS_RELAY_ENABLED/UDP/TCP) and retires VictoriaLogs' native
   :514 receiver. /shippers prefers the real source_ip for syslog senders.
-* Sun Jul 06 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-31
+* Mon Jul 06 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-31
 - Log subsystem feature wave: field-extraction (parse) rules (F2), log-derived
   metrics with warn/crit thresholds (F3), GeoIP country enrichment for IP
   addresses in the search view (F4), a "show context" (surrounding lines) action
@@ -373,11 +373,11 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 - Backend: validate host_binding (prevents Naemon object injection), AnyHttpUrl
   validation on vexor_logs_url, atomic logs.env writes, surface vexor-victorialogs
   restart failure as HTTP 500, clean up decrypted SSH keys in shipper /tmp.
-* Tue Nov 18 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-4
+* Thu May 21 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-4
 - Ship settings/storage/saved-searches/histogram/export/test-query/
   filter-library/shipper-deploy routers and the naemon passive helper.
 - Bundle 12 starter filter JSONs under /etc/vexor/logs/filters/.
 - Bundle install-linux-agent.sh and install-windows-agent.ps1.
 - Persist retention via VEXOR_LOGS_RETENTION_DAYS in /etc/vexor/logs.env.
-* Mon Nov 17 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-1
+* Thu May 21 2026 sayonarase <sayonarase@users.noreply.github.com> - 0.1.0-1
 - Initial release: API plugin + log alerts evaluator.

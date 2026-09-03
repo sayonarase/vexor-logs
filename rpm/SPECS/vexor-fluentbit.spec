@@ -52,5 +52,5 @@ fi
 /usr/lib/systemd/system/vexor-fluentbit.service
 
 %changelog
-* Mon Nov 17 2026 sayonarase <sayonarase@users.noreply.github.com> - 5.0.5-1
+* Thu May 21 2026 sayonarase <sayonarase@users.noreply.github.com> - 5.0.5-1
 - Initial Fluent Bit wrapper for Vexor Logs.
