@@ -45,12 +45,9 @@ encoding.codec = "json"
 compression = "none"
 labels = { host = "{{ host }}", service = "{{ service }}" }
 out_of_order_action = "accept"
-# Vector 0.57 added template confinement, which rejects a template that has no
-# static prefix. Our labels are whole-value event references ({{ host }} /
-# {{ service }}), so a prefix is not meaningful without changing every stored
-# label value and breaking existing LogsQL queries and dashboards.
-# Upstream treats this exact case as a false positive: vectordotdev/vector
-# #25898 (vector-provided references) and #26011 (non-URL fields).
-# This is not a regression: 0.56 had no confinement at all, so this only makes
-# the pre-existing behaviour explicit. Remove once upstream ships the fix.
-dangerously_allow_unconfined_template_resolution = true
+# Vector 0.57 added template confinement and wrongly rejected our labels, which
+# are whole-value event references ({{ host }} / {{ service }}) rather than URL
+# fragments, so we had to switch confinement off with
+# dangerously_allow_unconfined_template_resolution. Upstream fixed that false
+# positive (vectordotdev/vector #25898 and #26011), so from 0.58 on the labels
+# are accepted as they are and confinement stays on. Do not add the flag back.

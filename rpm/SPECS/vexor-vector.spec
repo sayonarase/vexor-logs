@@ -5,8 +5,8 @@ AutoReq: no
 AutoProv: no
 
 Name:           vexor-vector
-Version:        0.57.0
-Release:        2%{?dist}
+Version:        0.58.0
+Release:        1%{?dist}
 Summary:        Vector agent packaged with Vexor Logs defaults
 License:        MPL-2.0
 URL:            https://vector.dev/
@@ -54,17 +54,36 @@ if ! grep -q '^VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=' /etc/vexor/logs.
 fi
 
 CFG=/etc/vexor/logs/vector.toml
-if [ -f "$CFG" ] && grep -q '{{' "$CFG" \
-   && ! grep -q 'dangerously_allow_unconfined_template_resolution' "$CFG"; then
-    # Appending puts the key in the file's LAST table, so only do it when that
-    # table really is the loki sink; otherwise tell the admin instead of
-    # silently writing the key into the wrong component.
-    LAST_TABLE=$(grep -o '^\[[^]]*\]' "$CFG" | tail -1)
-    if [ "$LAST_TABLE" = "[sinks.victorialogs]" ]; then
-        printf '\n# Added on upgrade to Vector 0.57 (template confinement); see\n# vectordotdev/vector #25898 and #26011.\ndangerously_allow_unconfined_template_resolution = true\n' >> "$CFG"
+# --- Vector 0.58 migration -------------------------------------------------
+# 0.57 wrongly flagged our {{ host }} / {{ service }} labels as unconfined
+# templates, so the 0.57 packages switched confinement off in vector.toml.
+# 0.58 fixes that false positive, so the bypass is no longer needed and is
+# removed here. vector.toml is %config(noreplace), so an existing install keeps
+# its own file and would otherwise carry the bypass forever. The edit is
+# verified before it is kept: if the resulting config does not validate, the
+# original is put back and the bypass stays.
+if [ -f "$CFG" ] && grep -q '^dangerously_allow_unconfined_template_resolution' "$CFG"; then
+    cp -a "$CFG" "$CFG.rpmsave-0.57"
+    awk '
+      /^dangerously_allow_unconfined_template_resolution/ { next }
+      /^#/ && (/confinement/ || /25898/ || /26011/ || /dangerously_allow_unconfined/) { next }
+      { print }
+    ' "$CFG.rpmsave-0.57" > "$CFG.new-0.58"
+    (
+        set -a
+        [ -f /etc/vexor/logs.env ] && . /etc/vexor/logs.env
+        set +a
+        /usr/bin/vector validate --no-environment "$CFG.new-0.58"
+    ) >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        cat "$CFG.new-0.58" > "$CFG"
+        rm -f "$CFG.new-0.58"
+        echo "vexor-vector: removed the 0.57 template-confinement bypass from $CFG" >&2
+        echo "vexor-vector: previous file kept as $CFG.rpmsave-0.57" >&2
     else
-        echo "vexor-vector: NOTE - $CFG uses templates but its last table is $LAST_TABLE." >&2
-        echo "vexor-vector: add 'dangerously_allow_unconfined_template_resolution = true' to the sink manually." >&2
+        rm -f "$CFG.new-0.58"
+        echo "vexor-vector: kept $CFG unchanged - it does not validate without" >&2
+        echo "vexor-vector: dangerously_allow_unconfined_template_resolution." >&2
     fi
 fi
 
@@ -81,6 +100,18 @@ fi
 /usr/lib/systemd/system/vexor-vector.service
 
 %changelog
+* Thu Sep 03 2026 Vexor <ops@vexormon.com> - 0.58.0-1
+- Update bundled Vector to 0.58.0. Among the fixes are several that affect log
+  delivery on a busy server: metric sinks using a disk buffer could stall
+  permanently after 10-15 minutes, a disk buffer could look full after a crash
+  and block new events, and a record too large to write tore down the whole
+  pipeline instead of being dropped on its own.
+- Remove the template-confinement bypass. Vector 0.57 wrongly treated our
+  {{ host }} and {{ service }} labels as unconfined templates, so we had to set
+  dangerously_allow_unconfined_template_resolution. Upstream fixed that false
+  positive, so confinement is now on again. Existing configurations are
+  migrated in %%post, and only if the result still validates.
+
 * Wed Sep 02 2026 Vexor <ops@vexormon.com> - 0.57.0-2
 - Create the Vector data_dir via StateDirectory=vector. vector.toml sets
   data_dir=/var/lib/vector, but no package owned that directory and the unit
