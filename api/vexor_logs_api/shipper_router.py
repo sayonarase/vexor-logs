@@ -12,6 +12,7 @@ import os
 import shlex
 import socket
 import subprocess
+import time
 from app.services import jobs
 import tempfile
 from pathlib import Path
@@ -334,6 +335,105 @@ def get_ingest_token() -> dict:
     /api/v1/logs/push with `Authorization: Bearer <token>`."""
     tok = _ingest_token()
     return {"configured": bool(tok), "token": tok, "scheme": "Bearer"}
+
+
+class RotateIn(BaseModel):
+    ensure: bool = False
+
+
+@router.get("/ingest-token/consumers", dependencies=[Depends(require_admin)])
+def ingest_token_consumers(days: int = 7) -> dict:
+    """Admin-only: hosts that recently shipped logs.
+
+    Vexor keeps no registry of deployed shippers, so instead of guessing we
+    report what actually reached the log store. Rotating the token stops every
+    one of these from shipping until it is reconfigured with the new token.
+    """
+    days = max(1, min(int(days), 90))
+    try:
+        from . import _client
+
+        rows = _client.query(
+            f"_time:{days}d | stats by (host) count() as events, max(_time) as last_seen",
+            limit=500,
+        )
+    except Exception as exc:
+        # Never block the rotation UI just because the log store is unhappy.
+        log.warning("could not list ingest consumers: %s", exc)
+        return {"hosts": [], "days": days, "available": False}
+
+    hosts = []
+    for row in rows:
+        name = str(row.get("host") or "").strip()
+        if not name:
+            # Rows without a host label come from local pipelines, not shippers.
+            continue
+        try:
+            events = int(row.get("events") or 0)
+        except (TypeError, ValueError):
+            events = 0
+        hosts.append({"host": name, "events": events, "last_seen": row.get("last_seen")})
+
+    hosts.sort(key=lambda h: h["events"], reverse=True)
+    return {"hosts": hosts, "days": days, "available": True}
+
+
+@router.post("/ingest-token/rotate", dependencies=[Depends(require_admin)])
+def rotate_ingest_token(body: Optional[RotateIn] = None) -> dict:
+    """Admin-only: generate a new ingest token, or provision the first one.
+
+    vexor-api runs as ``vexor`` with NoNewPrivileges and therefore cannot write
+    /etc/nginx or reload nginx. The privileged work is handed to vexor-jobd
+    (root), which writes both files atomically and rolls back if nginx rejects
+    the result. With ``ensure`` an existing token is left untouched.
+    """
+    ensure = bool(body.ensure) if body else False
+    if not ensure and not _ingest_token():
+        # Nothing to invalidate yet -- this is a first provision, not a rotation.
+        ensure = True
+
+    try:
+        if not os.path.isdir(jobs.QUEUE_DIR):
+            raise RuntimeError("job queue directory is missing")
+        job_id = jobs.submit("ingest-token-rotate", {"ensure": ensure})
+    except Exception as exc:
+        log.warning("could not submit ingest-token-rotate job: %s", exc)
+        raise HTTPException(
+            503,
+            "The background job service is unavailable, so the token was not "
+            "changed. Check that vexor-jobd is running.",
+        )
+
+    deadline = time.time() + 60.0
+    grace = time.time() + 6.0
+    state = None
+    while time.time() < deadline:
+        status = jobs.read_status(job_id)
+        state = status.get("state") if status else None
+        if state in ("ok", "failed"):
+            break
+        if state == "queued" and time.time() > grace:
+            # jobd is not consuming the queue; nothing has been changed.
+            raise HTTPException(
+                503,
+                "vexor-jobd is not processing jobs, so the token was not changed.",
+            )
+        time.sleep(0.5)
+
+    if state != "ok":
+        raise HTTPException(
+            500,
+            "The token could not be updated. nginx was left on its previous "
+            "configuration; see the vexor-jobd log for details.",
+        )
+
+    tok = _ingest_token()
+    return {
+        "configured": bool(tok),
+        "token": tok,
+        "scheme": "Bearer",
+        "rotated": not ensure,
+    }
 
 _ALLOWED_SCRIPTS = {
     "install-linux-agent.sh":              ("text/x-shellscript", "linux"),

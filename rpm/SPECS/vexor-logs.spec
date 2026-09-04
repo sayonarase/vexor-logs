@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        37%{?dist}
+Release:        38%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -191,6 +191,11 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /etc/polkit-1/rules.d/92-vexor-syslog-relay.rules
 
 %changelog
+* Fri Sep 04 2026 Vexor <support@vexormon.com> - 0.1.0-38
+- Add the endpoints behind the new token management in the UI: rotating the
+  ingest token, and listing the hosts that recently shipped logs so it is
+  clear which shippers a rotation will interrupt.
+
 * Thu Sep 03 2026 Vexor <support@vexormon.com> - 0.1.0-37
 - logs: the /storage endpoint read the long-renamed vlstorage_data_size_bytes metric,
   which no longer exists in VictoriaLogs, so the reported size always fell back to a
