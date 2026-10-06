@@ -1,4 +1,4 @@
-%global vl_version 1.52.0
+%global vl_version 1.53.0
 %define _build_id_links none
 %global __os_install_post %{nil}
 %global debug_package %{nil}
@@ -75,6 +75,12 @@ systemctl try-restart vexor-victorialogs.service 2>/dev/null || :
 %dir /etc/vexor/logs
 
 %changelog
+* Tue Oct 06 2026 Vexor <build@vexormon.com> - 1.53.0-1
+- Update VictoriaLogs to v1.53.0.
+- SECURITY: upstream Go builder bumped 1.26.5 -> 1.27.1.
+- SECURITY: /delete/run_task and the /internal/* endpoints now accept only
+  POST (SSRF hardening). The Vexor retention enforcer (vexor-logs) was
+  switched to POST at the same time, so per-host retention keeps working.
 * Mon Aug 17 2026 Vexor <build@vexormon.com> - 1.52.0-1
 - Update VictoriaLogs to v1.52.0.
 - Fixes a LogsQL regression introduced in v1.51.0 where filter pipes written

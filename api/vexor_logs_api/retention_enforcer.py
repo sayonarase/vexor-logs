@@ -43,7 +43,9 @@ def _delete_older_than(host: str, cutoff_iso: str) -> str | None:
     url = (f"{_client._base()}/delete/run_task"
            f"?filter={urllib.parse.quote(logsql)}")
     try:
-        req = urllib.request.Request(url, method="GET")
+        # VictoriaLogs >= 1.53 accepts /delete/run_task only via POST (SSRF
+        # hardening, upstream issue #1635); POST also works on older versions.
+        req = urllib.request.Request(url, data=b"", method="POST")
         resp = urllib.request.urlopen(req, timeout=60)  # noqa: S310
         body = resp.read().decode("utf-8", errors="replace")
         try:

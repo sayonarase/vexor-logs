@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        38%{?dist}
+Release:        39%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -191,6 +191,11 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /etc/polkit-1/rules.d/92-vexor-syslog-relay.rules
 
 %changelog
+* Tue Oct 06 2026 Vexor <support@vexormon.com> - 0.1.0-39
+- The per-host retention enforcer now starts VictoriaLogs delete tasks with
+  POST. VictoriaLogs 1.53 refuses GET on /delete/run_task, which would have
+  made per-host retention overrides silently stop deleting old logs.
+
 * Fri Sep 04 2026 Vexor <support@vexormon.com> - 0.1.0-38
 - Add the endpoints behind the new token management in the UI: rotating the
   ingest token, and listing the hosts that recently shipped logs so it is
