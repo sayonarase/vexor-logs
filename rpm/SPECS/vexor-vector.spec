@@ -5,7 +5,7 @@ AutoReq: no
 AutoProv: no
 
 Name:           vexor-vector
-Version:        0.58.0
+Version:        0.60.0
 Release:        1%{?dist}
 Summary:        Vector agent packaged with Vexor Logs defaults
 License:        MPL-2.0
@@ -73,7 +73,10 @@ if [ -f "$CFG" ] && grep -q '^dangerously_allow_unconfined_template_resolution' 
         set -a
         [ -f /etc/vexor/logs.env ] && . /etc/vexor/logs.env
         set +a
-        /usr/bin/vector validate --no-environment "$CFG.new-0.58"
+        # Validate with logs.env loaded: since Vector 0.59 a sink endpoint must
+        # be a real URL at load time, so --no-environment would reject our
+        # ${VEXOR_LOGS_URL}-based endpoint.
+        /usr/bin/vector validate --skip-healthchecks "$CFG.new-0.58"
     ) >/dev/null 2>&1
     if [ $? -eq 0 ]; then
         cat "$CFG.new-0.58" > "$CFG"
@@ -100,6 +103,16 @@ fi
 /usr/lib/systemd/system/vexor-vector.service
 
 %changelog
+* Mon Oct 26 2026 Vexor <ops@vexormon.com> - 0.60.0-1
+- Update bundled Vector from 0.58.0 to 0.60.0. Closes the memory-exhaustion
+  issues fixed in 0.59 (chunked_gelf decoder) and 0.60 (sample transform), and
+  fixes a disk buffer that could read the wrong data file after many rotations.
+  None of the 0.59/0.60 breaking changes touch the components Vexor uses (file,
+  journald, remap, loki sink).
+- The %%post migration now validates with logs.env loaded instead of
+  --no-environment: since 0.59 a sink endpoint must be a valid URL at load
+  time, so the uninterpolated ${VEXOR_LOGS_URL} endpoint would be rejected.
+
 * Thu Sep 03 2026 Vexor <ops@vexormon.com> - 0.58.0-1
 - Update bundled Vector to 0.58.0. Among the fixes are several that affect log
   delivery on a busy server: metric sinks using a disk buffer could stall
