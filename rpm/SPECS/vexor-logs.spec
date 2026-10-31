@@ -6,7 +6,7 @@ AutoProv: no
 
 Name:           vexor-logs
 Version:        0.1.0
-Release:        39%{?dist}
+Release:        40%{?dist}
 Summary:        Vexor Logs server-side glue (API plugin + alert evaluator)
 License:        Apache-2.0
 URL:            https://github.com/sayonarase/vexor-logs
@@ -40,7 +40,7 @@ Source25:       92-vexor-syslog-relay.rules
 
 Requires:       vexor-victorialogs
 Requires:       rsyslog
-Requires:       vexor-api >= 0.1.0-6
+Requires:       vexor-api >= 0.1.0-288
 Requires:       python3
 
 %description
@@ -191,6 +191,11 @@ systemctl try-restart vexor-api.service 2>/dev/null || :
 /etc/polkit-1/rules.d/92-vexor-syslog-relay.rules
 
 %changelog
+* Sat Oct 31 2026 Vexor <support@vexormon.com> - 0.1.0-40
+- Drop the plugin's own GET /api/v1/modules. vexor-api has served that
+  endpoint itself since 0.1.0-288 and is registered first, so the plugin
+  copy was never reached. Requires vexor-api >= 0.1.0-288 accordingly.
+
 * Tue Oct 06 2026 Vexor <support@vexormon.com> - 0.1.0-39
 - The per-host retention enforcer now starts VictoriaLogs delete tasks with
   POST. VictoriaLogs 1.53 refuses GET on /delete/run_task, which would have

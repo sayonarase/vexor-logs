@@ -20,14 +20,12 @@ Mounted at startup by vexor-api's plugin loader. Exposes:
   * CRUD /api/v1/log-alerts           — alert rule management
   * GET  /api/v1/log-checks/catalog   — log-check presets (filters + dead-man)
   * POST /api/v1/log-checks/for-host  — apply log checks to a host
-  * GET  /api/v1/modules              — module discovery (advertises "logs")
   * POST /api/v1/logs/ai-analyze      — LLM-assisted triage of a log query
 """
 from .logs_router import router as logs_router                       # noqa: F401
 from .log_alerts_router import router as log_alerts_router           # noqa: F401
 from .log_checks_router import router as log_checks_router           # noqa: F401
 from .retention_router import router as retention_router             # noqa: F401
-from .modules_router import router as modules_router                 # noqa: F401
 from .settings_router import router as settings_router               # noqa: F401
 from .saved_searches_router import router as saved_searches_router   # noqa: F401
 from .filter_library_router import router as filter_library_router   # noqa: F401
@@ -45,7 +43,6 @@ routers = [
     log_alerts_router,
     log_checks_router,
     retention_router,
-    modules_router,
     settings_router,
     saved_searches_router,
     filter_library_router,
